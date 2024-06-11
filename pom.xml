@@ -8,11 +8,6 @@
     <artifactId>fdrbench</artifactId>
     <version>0.0.1</version>
 
-    <properties>
-        <junit.jupiter.version>5.0.0-M4</junit.jupiter.version>
-        <junit.platform.version>1.0.0-M4</junit.platform.version>
-    </properties>
-
 
 <dependencies>
 
@@ -70,19 +65,6 @@
         <version>33.0.0-jre</version>
     </dependency>
 
-    <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-engine</artifactId>
-        <version>5.8.2</version>
-        <scope>test</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.junit.jupiter</groupId>
-        <artifactId>junit-jupiter-api</artifactId>
-        <version>5.8.2</version>
-        <scope>compile</scope>
-    </dependency>
-
 
     <dependency>
         <groupId>tech.tablesaw</groupId>
@@ -90,12 +72,6 @@
         <version>0.43.1</version>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
-    <dependency>
-        <groupId>ch.qos.logback</groupId>
-        <artifactId>logback-classic</artifactId>
-        <version>1.4.14</version>
-    </dependency>
 
 </dependencies>
 
