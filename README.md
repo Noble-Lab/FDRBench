@@ -49,7 +49,6 @@ usage: Options
  -score <arg>        The score name for ranking precursor/peptide/protein for FDP calculation
  -level <arg>        PSM, peptide, precursor or protein
  -pep <arg>          peptide/protein pair file
- -fdp_qvalue         Do q-value calculation for FDP
  -debug              Print detailed information for debugging
  -h                  Print this usage information
 ```
