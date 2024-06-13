@@ -1,6 +1,8 @@
 # [FDRBench](https://doi.org/10.1101/2024.06.01.596967)
 **FDRBench** is a tool for FDR control evaluation in proteomics. It provides two main functions: (1) build entrapment databases using randomly shuffled target sequences or using sequences from foreign species, and (2) estimate the FDP using the lower bound, combined, and paired methods.
 
+![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/FDRBench.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/latest/total)
+
 ## Installation
 
 FDRBench is written using Java. Only Java is required to be installed to run FDRBench.
