@@ -183,7 +183,7 @@ public class FDREval {
 
         // for FDP
         options.addOption("i", true, "PSM/peptide/precursor/protein file");
-        options.addOption("score", true, "The score name for ranking precursor/peptide/protein for FDP calculation");
+        options.addOption("score", true, "The score name for ranking precursor/peptide/protein for FDP calculation. The format could be \"score\", \"score:0\" or \"score:1\". The second part is 0 or 1, 0: lower is better, 1: higher is better");
         options.addOption("level", true, "PSM, peptide, precursor or protein");
         options.addOption("pep", true, "peptide/protein pair file");
         // for precursor pair information

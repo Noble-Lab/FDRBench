@@ -48,7 +48,9 @@ usage: Options
  -ns                 no shared peptides between entrapment and target protein
  -swap               Reverse the order of generated random peptide sequences
  -i <arg>            PSM/peptide/precursor/protein file
- -score <arg>        The score name for ranking precursor/peptide/protein for FDP calculation
+ -score <arg>        The score name for ranking precursor/peptide/protein for FDP calculation. The
+                     format could be "score", "score:0" or "score:1". The second part is 0 or 1, 0:
+                     lower is better, 1: higher is better
  -level <arg>        PSM, peptide, precursor or protein
  -pep <arg>          peptide/protein pair file
  -debug              Print detailed information for debugging
@@ -126,7 +128,7 @@ Q9BPW8         1.64447e-4  1.64447e-4  Q9BPW8   8
 Q8WUP2         1.64447e-4  1.64447e-4  Q8WUP2   9
 ```
 
-Below is an example command line to run protein FDP calculation. The database used to generate the identification result must be generated using FDRBench.
+Below is an example command line to run protein FDP calculation. The database used to generate the identification result must be generated using FDRBench. The command line parameter **-score** is set to use the column "score" as a secondary ranking score in FDP calculation. The number **0** indicates lower score is better (more confident).
 
 ```shell
 java -jar fdrbench-0.0.1.jar -i protein-fdp_protein_input.tsv -level protein -o protein-diann_fdp_protein.csv -score 'score:0' -fold 1 -pick first
