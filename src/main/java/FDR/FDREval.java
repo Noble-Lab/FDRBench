@@ -139,6 +139,30 @@ public class FDREval {
         }
     }
 
+    public static String entrapment_label = "_p_target";
+    public static String decoy_label = CParameter.decoy_prefix;
+    public static Label_Position entrapment_label_position = Label_Position.end;
+    public static Label_Position decoy_label_position = Label_Position.start;
+
+    public enum Label_Position {
+        start("Label position: start"),
+        end("Label position: end");
+
+        /**
+         * The description.
+         */
+        public final String description;
+
+        /**
+         * Constructor.
+         *
+         * @param description the description Label_Position
+         */
+        Label_Position(String description) {
+            this.description = description;
+        }
+    }
+
     public static void main(String[] args) throws ParseException, IOException {
 
         Options options = new Options();
@@ -189,6 +213,11 @@ public class FDREval {
         // for precursor pair information
         // options.addOption("dp", true, "Deep learning library");
         // options.addOption("fdp_qvalue", false, "Do q-value calculation for FDP");
+
+        options.addOption("decoy_label", true, "Label for decoy: rev_ in default");
+        options.addOption("decoy_pos", true, "Position of decoy label: 0 (start, in default); 1 (end)");
+        options.addOption("entrapment_label", true, "Label for entrapment: _p_target in default");
+        options.addOption("entrapment_pos", true, "Position of entrapment label: 0 (start); 1 (end, in default)");
 
         options.addOption("debug", false, "Print detailed information for debugging");
 
@@ -293,6 +322,30 @@ public class FDREval {
         if(cmd.hasOption("target_pep")){
             load_valid_target_peptides(cmd.getOptionValue("target_pep"));
             System.out.println("Use user-provided target peptides:"+valid_target_peptides.size());
+        }
+
+        if(cmd.hasOption("decoy_label")){
+            decoy_label = cmd.getOptionValue("decoy_label");
+        }
+        if(cmd.hasOption("decoy_pos")){
+            int pos = Integer.parseInt(cmd.getOptionValue("decoy_pos"));
+            if(pos == 1){
+                decoy_label_position = Label_Position.end;
+            }else{
+                decoy_label_position = Label_Position.start;
+            }
+        }
+
+        if(cmd.hasOption("entrapment_label")){
+            entrapment_label = cmd.getOptionValue("entrapment_label");
+        }
+        if(cmd.hasOption("entrapment_pos")){
+            int pos = Integer.parseInt(cmd.getOptionValue("entrapment_pos"));
+            if(pos == 1){
+                entrapment_label_position = Label_Position.end;
+            }else{
+                entrapment_label_position = Label_Position.start;
+            }
         }
 
 
@@ -2013,6 +2066,14 @@ public class FDREval {
             System.exit(1);
         }
 
+        // for each protein, generate one decoy protein or multiple decoy proteins
+        int n_r_pro = n_folds;
+        if(add_decoy){
+            // n_fold = 1, 3
+            // n_fold = 2, 5
+            n_r_pro = 2*n_folds+1;
+        }
+
         int i = 0;
         Random global_random = new Random(global_random_seed);
         int checking_for_duplicates_then_random_n = 0;
@@ -2058,31 +2119,31 @@ public class FDREval {
                                 if(random_peptide_generation_method == 0) {
                                     // 0
                                     if (fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }else {
                                     // 1
                                     if (fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }
                             }else{
                                 if(random_peptide_generation_method == 0) {
                                     // 0
                                     if(fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_folds, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_folds, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }else {
                                     if(fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }
                             }
@@ -2094,9 +2155,9 @@ public class FDREval {
                         if(rnd_peptides.isEmpty()){
                             if(checking_for_duplicates_then_random){
                                 if (fix_random_seed) {
-                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                 }else{
-                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_folds, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                 }
                                 if(rnd_peptides.isEmpty()) {
                                     rnd_peptides.add(pep);
@@ -2110,9 +2171,9 @@ public class FDREval {
                         }
                     }
 
-                    if(rnd_peptides.size()<n_folds){
+                    if(rnd_peptides.size()<n_r_pro){
                         // need to sample peptides from the existing decoy peptides
-                        int n_req = n_folds - rnd_peptides.size();
+                        int n_req = n_r_pro - rnd_peptides.size();
                         // generate n_req random numbers with range between 0 and rnd_peptides.size()-1
                         ArrayList<Integer> rnd_indices = new ArrayList<>();
                         for(int j=0;j<n_req;j++){
@@ -2157,6 +2218,8 @@ public class FDREval {
             dbWriter.write(">"+proID+" "+desc+"\n"+proSeq+"\n");
             // System.out.println("target peptides:"+digested_peptides.size());
             // System.out.println("decoy peptides: "+decoy_peptides.size());
+
+            // for entrapment proteins
             int seed_j = 0;
             HashMap<Integer,Random> i2rand = new HashMap<>();
             for(int n=0;n<n_folds;n++){
@@ -2197,11 +2260,20 @@ public class FDREval {
                     String [] acc_list = proID.split("\\|");
                     String [] desc_list = desc.split("\\s+");
                     if(acc_list.length==3) {
-                        new_pro_ID = acc_list[0] + "|" + acc_list[1]+n_fold_label+"_p_target"+"|"+acc_list[2]+n_fold_label+"_p_target";
+                        if(entrapment_label_position == Label_Position.end) {
+                            // new_pro_ID = acc_list[0] + "|" + acc_list[1] + n_fold_label + "_p_target" + "|" + acc_list[2] + n_fold_label + "_p_target";
+                            new_pro_ID = acc_list[0] + "|" + acc_list[1] + n_fold_label + entrapment_label + "|" + acc_list[2] + n_fold_label + entrapment_label;
+                        }else{
+                            new_pro_ID = acc_list[0] + "|" + entrapment_label + acc_list[1] + n_fold_label + "|" + entrapment_label + acc_list[2] + n_fold_label;
+                        }
                         boolean gn_detected = false;
                         for(int j=0;j< desc_list.length;j++){
                             if(desc_list[j].startsWith("GN=")){
-                                desc_list[j] = desc_list[j]+n_fold_label+"_p_target";
+                                if(entrapment_label_position == Label_Position.end) {
+                                    desc_list[j] = desc_list[j] + n_fold_label + entrapment_label;
+                                }else{
+                                    desc_list[j] =  desc_list[j].replaceFirst("GN=", "GN="+entrapment_label) + n_fold_label;
+                                }
                                 gn_detected = true;
                                 break;
                             }
@@ -2211,7 +2283,11 @@ public class FDREval {
                         }else{
                             System.err.println("Invalid protein ID: "+proID);
                             System.err.println("Invalid description: "+desc);
-                            new_desc = StringUtils.join(desc_list," ")+" GN="+acc_list[2]+"_i"+i+n_fold_label+"_p_target";
+                            if(entrapment_label_position == Label_Position.end) {
+                                new_desc = StringUtils.join(desc_list, " ") + " GN=" + acc_list[2] + "_i" + i + n_fold_label + entrapment_label;
+                            }else{
+                                new_desc = StringUtils.join(desc_list, " ") + " GN=" + entrapment_label + acc_list[2] + "_i" + i + n_fold_label;
+                            }
                             System.err.println("Use description: "+new_desc);
                         }
                     }else{
@@ -2222,12 +2298,187 @@ public class FDREval {
 
                 }else{
                     if (n_folds == 1) {
-                        dbWriter.write(">" + proID + "_p_target\n" + decoy_protein + "\n");
+                        if(entrapment_label_position == Label_Position.end) {
+                            dbWriter.write(">" + proID + entrapment_label + "\n" + decoy_protein + "\n");
+                        }else{
+                            dbWriter.write(">" + entrapment_label + proID + "\n" + decoy_protein + "\n");
+                        }
                     } else {
-                        dbWriter.write(">" + proID + "_" + n + "_p_target\n" + decoy_protein + "\n");
+                        if(entrapment_label_position == Label_Position.end) {
+                            dbWriter.write(">" + proID + "_" + n + entrapment_label  + "\n" + decoy_protein + "\n");
+                        }else{
+                            dbWriter.write(">" + entrapment_label + proID + "_" + n + "\n" + decoy_protein + "\n");
+                        }
                     }
                 }
 
+            }
+
+            // for decoy proteins
+            if(add_decoy){
+                int n_decoy = n_r_pro - n_folds;
+                i2rand = new HashMap<>();
+                for(int n=0;n<n_decoy;n++) {
+                // for(int n=0;n<n_folds;n++){
+                    StringBuilder decoy_protein = new StringBuilder();
+                    for (ArrayList<String> decoyPeptide : decoy_peptides) {
+                        if(decoyPeptide.size()!=n_r_pro){
+                            System.err.println("Error: the number of random peptides required: "+n_r_pro+", but only " +decoyPeptide.size()+ " random peptides generated!");
+                            System.exit(1);
+                        }
+                        decoy_protein.append(decoyPeptide.get(n+n_folds));
+                    }
+                    if(decoy_protein.length()!=proSeq.length()){
+                        System.err.println("The decoy protein length is not the same with the target protein length: "+decoy_protein.length()+"\t"+proSeq.length());
+                        System.err.println("Decoy protein:"+decoy_protein);
+                        System.err.println("Target protein:"+proSeq);
+                    }
+
+                    if(for_diann && for_uniprot) {
+
+                        String n_fold_label = "_"+n;
+                        if(n_folds == 1){
+                            n_fold_label = "";
+                        }
+                        String new_pro_ID = proID;
+                        String new_desc = desc;
+                        String [] acc_list = proID.split("\\|");
+                        String [] desc_list = desc.split("\\s+");
+                        if(acc_list.length==3) {
+                            if(decoy_label_position == Label_Position.end) {
+                                // new_pro_ID = acc_list[0] + "|" + acc_list[1] + n_fold_label + "_p_target" + "|" + acc_list[2] + n_fold_label + "_p_target";
+                                if(n==0){
+                                    // for target protein
+                                    new_pro_ID = acc_list[0] + "|" + acc_list[1] + n_fold_label + decoy_label + "|" + acc_list[2] + n_fold_label + decoy_label;
+                                }else {
+                                    // for entrapment protein
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        new_pro_ID = acc_list[0] + "|" + acc_list[1] + n_fold_label +entrapment_label+ decoy_label + "|" + acc_list[2] + n_fold_label +entrapment_label+ decoy_label;
+                                    }else{
+                                        new_pro_ID = acc_list[0] + "|" + entrapment_label + acc_list[1] + n_fold_label + decoy_label + "|" + entrapment_label + acc_list[2] + n_fold_label + decoy_label;
+                                    }
+                                }
+                            }else{
+                                if(n==0) {
+                                    new_pro_ID = acc_list[0] + "|" + decoy_label + acc_list[1] + n_fold_label + "|" + decoy_label + acc_list[2] + n_fold_label;
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        new_pro_ID = acc_list[0] + "|" + decoy_label + acc_list[1] + n_fold_label + entrapment_label + "|" + decoy_label + acc_list[2] + n_fold_label + entrapment_label;
+                                    }else{
+                                        new_pro_ID = acc_list[0] + "|" + decoy_label + entrapment_label + acc_list[1] + n_fold_label + "|" + decoy_label + entrapment_label+ acc_list[2] + n_fold_label;
+                                    }
+                                }
+                            }
+                            boolean gn_detected = false;
+                            for(int j=0;j< desc_list.length;j++){
+                                if(desc_list[j].startsWith("GN=")){
+                                    if(decoy_label_position == Label_Position.end) {
+                                        if(n==0){
+                                            // for target protein
+                                            desc_list[j] = desc_list[j] + n_fold_label + decoy_label;
+                                        }else{
+                                            // for entrapment protein
+                                            if(entrapment_label_position == Label_Position.end) {
+                                                desc_list[j] = desc_list[j] + n_fold_label + entrapment_label + decoy_label;
+                                            }else{
+                                                desc_list[j] =  desc_list[j].replaceFirst("GN=","GN="+entrapment_label) + n_fold_label + decoy_label;
+                                            }
+                                        }
+
+                                    }else{
+                                        if(n==0) {
+                                            desc_list[j] = desc_list[j].replaceFirst("GN=", "GN=" + decoy_label) + n_fold_label;
+                                        }else{
+                                            if(entrapment_label_position == Label_Position.end) {
+                                                desc_list[j] = desc_list[j].replaceFirst("GN=", "GN=" + decoy_label) + n_fold_label + entrapment_label;
+                                            }else{
+                                                desc_list[j] = desc_list[j].replaceFirst("GN=", "GN=" + decoy_label + entrapment_label) + n_fold_label;
+                                            }
+                                        }
+                                    }
+                                    gn_detected = true;
+                                    break;
+                                }
+                            }
+                            if(gn_detected){
+                                new_desc = StringUtils.join(desc_list," ");
+                            }else{
+                                System.err.println("Invalid protein ID: "+proID);
+                                System.err.println("Invalid description: "+desc);
+                                if(decoy_label_position == Label_Position.end) {
+                                    if(n==0){
+                                        new_desc = StringUtils.join(desc_list, " ") + " GN=" + acc_list[2] + "_i" + i + n_fold_label + decoy_label;
+                                    }else{
+                                        if(entrapment_label_position == Label_Position.end) {
+                                            new_desc = StringUtils.join(desc_list, " ") + " GN=" + acc_list[2] + "_i" + i + n_fold_label + entrapment_label + decoy_label;
+                                        }else{
+                                            new_desc = StringUtils.join(desc_list, " ") + " GN=" + entrapment_label + acc_list[2] + "_i" + i + n_fold_label + decoy_label;
+                                        }
+                                    }
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        new_desc = StringUtils.join(desc_list, " ") + " GN=" + decoy_label + acc_list[2] + "_i" + i + n_fold_label + entrapment_label;
+                                    }else{
+                                        new_desc = StringUtils.join(desc_list, " ") + " GN=" + decoy_label + entrapment_label+ acc_list[2] + "_i" + i + n_fold_label;
+                                    }
+                                }
+                                System.err.println("Use description: "+new_desc);
+                            }
+                        }else{
+                            System.err.println("Invalid protein ID: "+proID);
+                            System.exit(1);
+                        }
+                        dbWriter.write(">" + new_pro_ID+" "+new_desc+"\n" + decoy_protein + "\n");
+
+                    }else{
+                        if (n_folds == 1) {
+                            if(decoy_label_position == Label_Position.end) {
+                                if(n==0) {
+                                    dbWriter.write(">" + proID + decoy_label + "\n" + decoy_protein + "\n");
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        dbWriter.write(">" + proID + entrapment_label + decoy_label + "\n" + decoy_protein + "\n");
+                                    }else{
+                                        dbWriter.write(">" + entrapment_label + proID + decoy_label + "\n" + decoy_protein + "\n");
+                                    }
+                                }
+                            }else{
+                                if(n==0) {
+                                    dbWriter.write(">" + decoy_label + proID + "\n" + decoy_protein + "\n");
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        dbWriter.write(">" + decoy_label + proID + entrapment_label + "\n" + decoy_protein + "\n");
+                                    }else{
+                                        dbWriter.write(">" + decoy_label +entrapment_label+ proID + "\n" + decoy_protein + "\n");
+                                    }
+                                }
+                            }
+                        } else {
+                            if(decoy_label_position == Label_Position.end) {
+                                if(n==0) {
+                                    dbWriter.write(">" + proID + "_" + n + decoy_label + "\n" + decoy_protein + "\n");
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        dbWriter.write(">" + proID + "_" + n + entrapment_label + decoy_label + "\n" + decoy_protein + "\n");
+                                    }else{
+                                        dbWriter.write(">" + entrapment_label + proID + "_" + n  + decoy_label + "\n" + decoy_protein + "\n");
+                                    }
+                                }
+                            }else{
+                                if(n==0) {
+                                    dbWriter.write(">" + decoy_label + proID + "_" + n + "\n" + decoy_protein + "\n");
+                                }else{
+                                    if(entrapment_label_position == Label_Position.end) {
+                                        dbWriter.write(">" + decoy_label + proID + "_" + n +entrapment_label+ "\n" + decoy_protein + "\n");
+                                    }else{
+                                        dbWriter.write(">" + decoy_label + entrapment_label + proID + "_" + n + "\n" + decoy_protein + "\n");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                }
             }
 
         }
@@ -2311,7 +2562,8 @@ public class FDREval {
             PMatch pmatch = new PMatch();
             if(fdp_level.equals(FDRType.protein)){
                 // pmatch.protein = psm_table.row(i).getString("protein");
-                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
+                // pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
+                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
             }else if(fdp_level.equals(FDRType.peptide)){
                 pmatch.peptide = psm_table.row(i).getString("peptide");
             }else if(fdp_level.equals(FDRType.precursor)) {
@@ -2526,9 +2778,11 @@ public class FDREval {
             PMatch pmatch = new PMatch();
             boolean is_entrapment = false;
             if(fdp_level.equals(FDRType.protein)){
-                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
+                //pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
+                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
                 pmatch.id = pmatch.protein;
-                is_entrapment = pmatch.id.endsWith("p_target");
+                // is_entrapment = pmatch.id.endsWith("p_target");
+                is_entrapment = pmatch.id.endsWith(entrapment_label) || pmatch.id.startsWith(entrapment_label);
             }else if(fdp_level.equals(FDRType.peptide)){
                 // Variable modification should not be used if it is not real unique peptide sequence level.
                 pmatch.peptide = psm_table.row(i).getString("peptide");
@@ -2564,7 +2818,8 @@ public class FDREval {
             if(pmatch.is_entrapment){
                 String target = "";
                 if(fdp_level.equals(FDRType.protein)){
-                    target = PEntrapment.get_target_protein_by_entrapment_protein(pmatch.id, n_fold, "_p_target", ";");
+                    // target = PEntrapment.get_target_protein_by_entrapment_protein(pmatch.id, n_fold, "_p_target", ";");
+                    target = PEntrapment.get_target_protein_by_entrapment_protein(pmatch.id, n_fold, entrapment_label, ";");
                 }else if(fdp_level.equals(FDRType.peptide)){
                     target = peptidePair.get_paired_target_peptide(pmatch.peptide);
                 }else if(fdp_level.equals(FDRType.precursor)) {
@@ -2592,7 +2847,8 @@ public class FDREval {
                 // this is an entrapment match
                 if(fdp_level.equals(FDRType.protein)){
                     // id is protein ID
-                    String target = PEntrapment.get_target_protein_by_entrapment_protein(id, n_fold, "_p_target", ";");
+                    // String target = PEntrapment.get_target_protein_by_entrapment_protein(id, n_fold, "_p_target", ";");
+                    String target = PEntrapment.get_target_protein_by_entrapment_protein(id, n_fold, entrapment_label, ";");
                     if(id2PMatch.containsKey(target)){
                         // The target is present in the PSM table
                         target2entrapment.get(target).target_hit = id2PMatch.get(target);

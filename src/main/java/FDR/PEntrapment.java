@@ -37,7 +37,7 @@ public class PEntrapment {
     public static String get_target_protein_by_entrapment_protein(String entrapment_protein, int k_fold, String prefix, String sep) {
         String[] proteins = entrapment_protein.split(sep);
         if (k_fold == 1) {
-            if (proteins[0].endsWith(prefix)) {
+            if (proteins[0].endsWith(prefix) || proteins[0].startsWith(prefix)) {
                 // _p_target
                 return proteins[0].replaceAll(prefix + "$", "");
             } else {
@@ -46,7 +46,7 @@ public class PEntrapment {
                 return "";
             }
         } else {
-            if (proteins[0].endsWith(prefix)) {
+            if (proteins[0].endsWith(prefix) || proteins[0].startsWith(prefix)) {
                 // _p_target
                 return proteins[0].replaceAll("_\\d+" + prefix + "$", "");
             } else {
@@ -65,7 +65,7 @@ public class PEntrapment {
             if(protein.contains(entrapment_prefix)){
                 int n_entrapment = 0;
                 for(int i=0;i<d.length;i++){
-                    if(d[i].endsWith(entrapment_prefix)){
+                    if(d[i].endsWith(entrapment_prefix) || d[i].startsWith(entrapment_prefix)){
                         n_entrapment++;
                     }
                 }
@@ -88,7 +88,7 @@ public class PEntrapment {
                     // not all the proteins in the group are entrapment proteins
                     ArrayList<String> target_proteins = new ArrayList<>();
                     for(int i=0;i<d.length;i++){
-                        if(!d[i].endsWith(entrapment_prefix)){
+                        if(!d[i].endsWith(entrapment_prefix) && !d[i].startsWith(entrapment_prefix)){
                             target_proteins.add(d[i]);
                             //System.out.println(pro+"\t"+protein);
                         }
