@@ -160,7 +160,7 @@ run                                                peptide                      
 20230406_OLEP08_MMCC_1ug_MB_24min_AS_10ms_4Th_I_1  AFLADPSAFVAAAPVAAATTAAPAAAAAPAK     AFLADPSAFVAAAPVAAATTAAPAAAAAPAK                 3       1e-9     0    AFLADPSAFVAAAPVAAATTAAPAAAAAPAK_target     9
 ```
 
-The required columns are described below:
+The required columns are described below. Decoy hits shouldn't be included in the input file for FDP calcualtion.
 | Column name  | Description |
 | ------------ | ----------- |
 | peptide | peptide sequence |
@@ -209,7 +209,7 @@ The above example command line took about 30 seconds to run on a Mac MacBook com
 
 ##### Protein level FDR control evaluation
 
-For **protein level** FDP calculation, an example input is shown below. Only the three columns **protein**, **q_value** and **score** are required.
+For **protein level** FDP calculation, an example input is shown below. Only the three columns **protein**, **q_value** and **score** are required. Decoy hits shouldn't be included in the input file for FDP calcualtion.
 
 ```
 Protein.Group  PG.Q.Value  q_value     protein  score
