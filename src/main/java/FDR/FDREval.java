@@ -144,6 +144,11 @@ public class FDREval {
     public static Label_Position entrapment_label_position = Label_Position.end;
     public static Label_Position decoy_label_position = Label_Position.start;
 
+    /**
+     * When it's true, first reverse a target protein when generating a paired entrapment protein.
+     */
+    public static boolean reverse_target_protein_for_entrapment_protein_generation = false;
+
     public enum Label_Position {
         start("Label position: start"),
         end("Label position: end");
@@ -209,6 +214,7 @@ public class FDREval {
         options.addOption("i", true, "PSM/peptide/precursor/protein file");
         options.addOption("score", true, "The score name for ranking precursor/peptide/protein for FDP calculation. The format could be \"score\", \"score:0\" or \"score:1\". The second part is 0 or 1, 0: lower is better, 1: higher is better");
         options.addOption("level", true, "PSM, peptide, precursor or protein");
+        options.addOption("rev", false, "Reverse a target protein first when generating a paired entrapment protein");
         options.addOption("pep", true, "peptide/protein pair file");
         // for precursor pair information
         // options.addOption("dp", true, "Deep learning library");
@@ -281,6 +287,10 @@ public class FDREval {
 
         if(cmd.hasOption("seed")){
             global_random_seed = Integer.parseInt(cmd.getOptionValue("seed"));
+        }
+
+        if(cmd.hasOption("rev")){
+            reverse_target_protein_for_entrapment_protein_generation = true;
         }
 
         if(cmd.hasOption("fix_nc")){
@@ -525,6 +535,9 @@ public class FDREval {
                 System.out.println("For Prosit: " + for_prosit);
                 System.out.println("Precursor charge range: " + StringUtils.join(precursor_charge_range, ","));
                 System.out.println("NCE: " + nce);
+            }
+            if(reverse_target_protein_for_entrapment_protein_generation){
+                System.out.println("Reverse a target protein first when generating a paired entrapment protein: true");
             }
         }else{
             // FDR calculation
@@ -2087,6 +2100,9 @@ public class FDREval {
             String proID = headLine[0];
             String desc = headLine[1];
             String proSeq = el.getSequence();
+            if(reverse_target_protein_for_entrapment_protein_generation){
+                proSeq = StringUtils.reverse(proSeq);
+            }
             if(I2L){
                 proSeq = proSeq.replaceAll("I","L");
             }
