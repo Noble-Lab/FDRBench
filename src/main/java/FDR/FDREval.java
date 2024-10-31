@@ -2100,9 +2100,6 @@ public class FDREval {
             String proID = headLine[0];
             String desc = headLine[1];
             String proSeq = el.getSequence();
-            if(reverse_target_protein_for_entrapment_protein_generation){
-                proSeq = StringUtils.reverse(proSeq);
-            }
             if(I2L){
                 proSeq = proSeq.replaceAll("I","L");
             }
@@ -2116,7 +2113,13 @@ public class FDREval {
                 System.out.println("Amino acid Z is replaced with Q:"+proID+"\n"+proSeq);
                 proSeq = proSeq.replaceAll("Z", "Q");
             }
-            ArrayList<ExtendedPeptide> digested_peptides = digest_protein(proSeq,digestionParameters);
+            // ArrayList<ExtendedPeptide> digested_peptides = digest_protein(proSeq,digestionParameters);
+            ArrayList<ExtendedPeptide> digested_peptides;
+            if(reverse_target_protein_for_entrapment_protein_generation){
+                digested_peptides = digest_protein(StringUtils.reverse(proSeq),digestionParameters);
+            }else{
+                digested_peptides = digest_protein(proSeq,digestionParameters);
+            }
             // This is used to generate entrapment proteins
             ArrayList<ArrayList<String>> decoy_peptides = new ArrayList<>(digested_peptides.size());
             // for each peptide, generate decoy peptides
