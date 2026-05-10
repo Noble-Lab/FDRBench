@@ -6,7 +6,7 @@
 
     <groupId>Proteomics</groupId>
     <artifactId>fdrbench</artifactId>
-    <version>0.0.4</version>
+    <version>1.0.0</version>
 
 
 <dependencies>
@@ -24,7 +24,26 @@
                 <groupId>ch.qos.logback</groupId>
                 <artifactId>logback-classic</artifactId>
             </exclusion>
+            <!-- Compomics utilities pulls in JFreeChart 1.0.13 (and jcommon),
+                 which still uses the old org.jfree.ui.* package and conflicts
+                 with the modern org.jfree:jfreechart:1.5.4 added below for the
+                 GUI Plot tab. Excluded so 1.5.4 is the only one on the path. -->
+            <exclusion>
+                <groupId>jfree</groupId>
+                <artifactId>jfreechart</artifactId>
+            </exclusion>
+            <exclusion>
+                <groupId>jfree</groupId>
+                <artifactId>jcommon</artifactId>
+            </exclusion>
         </exclusions>
+    </dependency>
+
+    <!-- FlatLaf - Modern Look and Feel for Swing -->
+    <dependency>
+        <groupId>com.formdev</groupId>
+        <artifactId>flatlaf</artifactId>
+        <version>3.4</version>
     </dependency>
 
     <dependency>
@@ -76,6 +95,26 @@
         <version>0.43.1</version>
     </dependency>
 
+    <!-- JFreeChart for the Plot tab in the GUI -->
+    <dependency>
+        <groupId>org.jfree</groupId>
+        <artifactId>jfreechart</artifactId>
+        <version>1.5.4</version>
+    </dependency>
+
+    <!-- Vector PDF export of the FDP plot. PdfBoxGraphics2D adapts a Java
+         Graphics2D to Apache PDFBox so chart.draw() can write straight into a
+         PDF page (same code path as PNG, just different sink). -->
+    <dependency>
+        <groupId>org.apache.pdfbox</groupId>
+        <artifactId>pdfbox</artifactId>
+        <version>2.0.31</version>
+    </dependency>
+    <dependency>
+        <groupId>de.rototor.pdfbox</groupId>
+        <artifactId>graphics2d</artifactId>
+        <version>0.43</version>
+    </dependency>
 
 </dependencies>
 
@@ -154,7 +193,7 @@
                     <manifest>
                         <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
-                        <mainClass>main.java.FDR.FDREval</mainClass>
+                        <mainClass>main.java.gui.FDRBenchLauncher</mainClass>
                         <addClasspath>true</addClasspath>
                         <classpathPrefix>lib</classpathPrefix>
                     </manifest>
