@@ -132,7 +132,10 @@ public class FDRBenchGUI extends JFrame {
     private JTextField pepPairFileField;
     private JTextField fdpOutputField;
     private JComboBox<String> fdpLevelCombo;
-    private JTextField scoreColumnField;
+    private JComboBox<String> scoreColumnCombo;
+    // Sentinel item meaning "do not pass -score" so FDRBench ranks by q_value
+    // alone. Must not collide with any real column name a user might choose.
+    private static final String NO_SCORE_ITEM = "none";
     private JComboBox<String> scoreDirectionCombo;
     private JSpinner fdpFoldSpinner;
     private JComboBox<String> pickMethodCombo;
@@ -1206,6 +1209,19 @@ public class FDRBenchGUI extends JFrame {
         gbc.weightx = 0;
         panel.add(createLabel("Input File:", "PSM/peptide/precursor/protein file"), gbc);
         inputFileField = createTextField("Path to input file");
+        // Refresh the Score Column dropdown whenever the input file path
+        // changes — pulls numeric columns from the file's first data row so
+        // the user can pick from a real list instead of typing a name.
+        inputFileField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            private void refresh() {
+                String path = inputFileField.getText().trim();
+                File f = path.isEmpty() ? null : new File(path);
+                refreshScoreColumns(f != null && f.isFile() ? f : null);
+            }
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { refresh(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { refresh(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { refresh(); }
+        });
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(inputFileField, gbc);
@@ -1266,12 +1282,17 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
-        panel.add(createLabel("Score Column:", "Score column name for ranking"), gbc);
-        scoreColumnField = createTextField("Column name used for ranking, e.g. score");
-        scoreColumnField.setText("score");
+        panel.add(createLabel("Score Column:",
+                "Column used for ranking. Auto-populated from the input "
+                        + "file's numeric columns; \"none\" ranks by q_value "
+                        + "alone."), gbc);
+        scoreColumnCombo = new JComboBox<>(new String[] { NO_SCORE_ITEM });
+        scoreColumnCombo.setEditable(true);
+        scoreColumnCombo.setSelectedItem(NO_SCORE_ITEM);
+        styleComboBox(scoreColumnCombo);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(scoreColumnField, gbc);
+        panel.add(scoreColumnCombo, gbc);
         row++;
 
         gbc.gridx = 0;
@@ -1837,8 +1858,8 @@ public class FDRBenchGUI extends JFrame {
                 addOption(cmd, "-o", fdpOut.getAbsolutePath());
             }
             addOption(cmd, "-level", String.valueOf(fdpLevelCombo.getSelectedItem()));
-            String scoreCol = scoreColumnField.getText().trim();
-            if (!scoreCol.isEmpty()) {
+            String scoreCol = getSelectedScoreColumn();
+            if (scoreCol != null && !scoreCol.isEmpty()) {
                 addOption(cmd, "-score", scoreCol + ":" + (scoreDirectionCombo.getSelectedIndex() == 0 ? "0" : "1"));
             }
             // -fold drives the k-fold path; -r drives the combined-entrapment
@@ -2409,7 +2430,9 @@ public class FDRBenchGUI extends JFrame {
         pepPairFileField.setText("");
         fdpOutputField.setText("");
         fdpLevelCombo.setSelectedIndex(0);
-        scoreColumnField.setText("score");
+        scoreColumnCombo.setModel(new javax.swing.DefaultComboBoxModel<>(
+                new String[] { NO_SCORE_ITEM }));
+        scoreColumnCombo.setSelectedItem(NO_SCORE_ITEM);
         scoreDirectionCombo.setSelectedIndex(0);
         fdpFoldSpinner.setValue(1);
         pickMethodCombo.setSelectedIndex(0);
@@ -2526,6 +2549,88 @@ public class FDRBenchGUI extends JFrame {
                 cmd.add(option);
                 cmd.add(trimmed);
             }
+        }
+    }
+
+    /**
+     * Returns the user's chosen Score column, or {@code null} when the user
+     * picked {@link #NO_SCORE_ITEM} so FDRBench should rank on q_value alone.
+     */
+    private String getSelectedScoreColumn() {
+        if (scoreColumnCombo == null) return null;
+        Object sel = scoreColumnCombo.getSelectedItem();
+        if (sel == null) return null;
+        String s = sel.toString().trim();
+        if (s.isEmpty() || NO_SCORE_ITEM.equals(s)) return null;
+        return s;
+    }
+
+    /**
+     * Refresh the Score Column dropdown from the given input file. Reads the
+     * header line plus the first data row, keeps columns whose first-row value
+     * parses as a number, drops {@code q_value} (which FDRBench already uses
+     * for primary ranking), and surfaces {@code score} at the top when present.
+     * If {@code file} is null/unreadable, falls back to the static defaults.
+     */
+    private void refreshScoreColumns(File file) {
+        if (scoreColumnCombo == null) return;
+        String previous = scoreColumnCombo.getSelectedItem() == null
+                ? null
+                : scoreColumnCombo.getSelectedItem().toString();
+
+        java.util.List<String> items = new java.util.ArrayList<>();
+        items.add(NO_SCORE_ITEM);
+
+        if (file != null && file.isFile()) {
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(
+                    new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+                String headerLine = r.readLine();
+                String firstData = headerLine == null ? null : r.readLine();
+                if (headerLine != null && firstData != null) {
+                    char delim = headerLine.indexOf('\t') >= 0 ? '\t'
+                            : (headerLine.indexOf(',') >= 0 ? ',' : '\t');
+                    String[] headers = headerLine.split(java.util.regex.Pattern.quote(String.valueOf(delim)), -1);
+                    String[] values  = firstData.split(java.util.regex.Pattern.quote(String.valueOf(delim)), -1);
+                    java.util.List<String> numeric = new java.util.ArrayList<>();
+                    for (int i = 0; i < headers.length && i < values.length; i++) {
+                        String name = headers[i].trim();
+                        if (name.isEmpty()
+                                || "q_value".equalsIgnoreCase(name)
+                                || "charge".equalsIgnoreCase(name)) {
+                            continue;
+                        }
+                        String v = values[i].trim();
+                        if (v.isEmpty()) continue;
+                        try {
+                            Double.parseDouble(v);
+                            numeric.add(name);
+                        } catch (NumberFormatException ignored) { }
+                    }
+                    // Promote "score" to the top of the actionable list when present.
+                    int scoreIdx = -1;
+                    for (int i = 0; i < numeric.size(); i++) {
+                        if ("score".equalsIgnoreCase(numeric.get(i))) { scoreIdx = i; break; }
+                    }
+                    if (scoreIdx >= 0) {
+                        items.add(numeric.remove(scoreIdx));
+                    }
+                    items.addAll(numeric);
+                }
+            } catch (IOException ignored) {
+                // Fall through to defaults below.
+            }
+        }
+
+        scoreColumnCombo.setModel(new javax.swing.DefaultComboBoxModel<>(
+                items.toArray(new String[0])));
+        // Preserve the user's selection if still valid; otherwise prefer
+        // "score", else fall back to "none".
+        if (previous != null && items.contains(previous)) {
+            scoreColumnCombo.setSelectedItem(previous);
+        } else if (items.contains("score")) {
+            scoreColumnCombo.setSelectedItem("score");
+        } else {
+            scoreColumnCombo.setSelectedItem(NO_SCORE_ITEM);
         }
     }
 
