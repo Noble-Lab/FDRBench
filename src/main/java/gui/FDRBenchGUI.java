@@ -1666,7 +1666,6 @@ public class FDRBenchGUI extends JFrame {
 
         consoleArea = new JTextArea();
         consoleArea.setEditable(false);
-        consoleArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         // line wrapping is off so high-volume process output
         // doesn't trigger constant relayout while running.
         consoleArea.setLineWrap(false);
