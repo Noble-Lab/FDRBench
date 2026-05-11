@@ -1842,20 +1842,31 @@ public class FDRBenchGUI extends JFrame {
             if (!scoreCol.isEmpty()) {
                 addOption(cmd, "-score", scoreCol + ":" + (scoreDirectionCombo.getSelectedIndex() == 0 ? "0" : "1"));
             }
-            // -fold only applies to k-fold (Random Shuffling) FDP. Skip it
-            // for Foreign Species so the CLI takes the combined-entrapment
-            // path keyed off -r instead.
-            if (seqMethodCombo == null
-                    || seqMethodCombo.getSelectedIndex() == SEQ_METHOD_SHUFFLING) {
+            // -fold drives the k-fold path; -r drives the combined-entrapment
+            // path. Foreign Species always uses -r. Random Shuffling normally
+            // uses -fold, but the k-fold path requires a peptide pair file at
+            // peptide-tier levels (peptide/precursor/psm); when no pair file
+            // is provided, reroute the Fold value to -r so the CLI takes the
+            // combined-entrapment path (which derives entrapment status from
+            // the protein column instead).
+            boolean isShuffling = seqMethodCombo == null
+                    || seqMethodCombo.getSelectedIndex() == SEQ_METHOD_SHUFFLING;
+            String fdpLevel = String.valueOf(fdpLevelCombo.getSelectedItem());
+            boolean isPeptideTierLevel = "peptide".equals(fdpLevel)
+                    || "precursor".equals(fdpLevel)
+                    || "psm".equals(fdpLevel);
+            boolean rerouteToR = isShuffling
+                    && isPeptideTierLevel
+                    && pepPairFileField.getText().trim().isEmpty();
+            if (isShuffling && !rerouteToR) {
                 addOption(cmd, "-fold", String.valueOf(fdpFoldSpinner.getValue()));
             }
             addOption(cmd, "-pick", String.valueOf(pickMethodCombo.getSelectedItem()));
-            // -r only applies to combined-entrapment (Foreign Species). Skip
-            // it for Random Shuffling so a stale value in the hidden field
-            // can't sneak into the run.
             if (seqMethodCombo != null
                     && seqMethodCombo.getSelectedIndex() == SEQ_METHOD_FOREIGN) {
                 addOption(cmd, "-r", rRatioField.getText());
+            } else if (rerouteToR) {
+                addOption(cmd, "-r", String.valueOf(fdpFoldSpinner.getValue()));
             }
         }
 

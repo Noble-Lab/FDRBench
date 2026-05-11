@@ -325,18 +325,23 @@ public class FdpPlotPanel extends JPanel {
         try {
             FdpData data = parseCsv(csv);
             chart = buildChart(data);
+            // Original axis bounds set by buildChart — captured here so a
+            // double-click can restore them exactly. ChartPanel.restoreAutoBounds()
+            // would instead auto-fit to the dataset, which collapses the x-axis
+            // to the q-value range and pushes the y=x diagonal, the FDR=1%
+            // marker, and the annotation block off-screen.
+            final double initialMax = Math.max(data.maxFdp, 0.05);
             ChartPanel newPanel = new ChartPanel(chart, true, true, true, true, true);
             newPanel.setPreferredSize(new Dimension(640, 480));
             newPanel.setMouseWheelEnabled(true);
-            // Double-click anywhere on the chart to restore the original
-            // auto-range on both axes — quick reset after the user drags or
-            // scroll-zooms into a region of the plot.
             newPanel.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseClicked(java.awt.event.MouseEvent e) {
                     if (e.getClickCount() == 2
                             && SwingUtilities.isLeftMouseButton(e)) {
-                        newPanel.restoreAutoBounds();
+                        XYPlot plot = chart.getXYPlot();
+                        plot.getDomainAxis().setRange(0, initialMax);
+                        plot.getRangeAxis().setRange(0, initialMax);
                     }
                 }
             });
