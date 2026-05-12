@@ -9,6 +9,7 @@ import org.jfree.chart.axis.NumberTickUnit;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYItemRenderer;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.chart.title.LegendTitle;
 import org.jfree.chart.ui.RectangleEdge;
@@ -75,8 +76,59 @@ public class FdpPlotPanel extends JPanel {
     private final JButton saveButton;
     private final JTextField fileField;
     private ChartPanel chartPanel;
+    private JComponent chartContainer;
     private JFreeChart chart;
     private File loadedCsv;
+
+    // Plot-side controls (right-hand panel). Re-created on every CSV load, so
+    // they're nullable — null whenever no chart is showing.
+    private JRadioButton xAutoBtn;
+    private JRadioButton xCustomBtn;
+    private JSpinner     xCustomValue;
+    private JRadioButton yAutoBtn;
+    private JRadioButton yCustomBtn;
+    private JSpinner     yCustomValue;
+    private Runnable     applyXRange;
+    private Runnable     applyYRange;
+
+    // Discovery annotation: text content (fixed for a given CSV) and the
+    // XYTextAnnotation handles currently attached to the chart. We rebuild
+    // and reposition the latter every time an axis range changes so the
+    // text block stays inside the visible region.
+    private java.util.List<AnnotationLine> annotationLines;
+    private java.util.List<XYTextAnnotation> textAnnotations;
+
+    // Live visibility of each method, mirrored from the checkboxes so the
+    // discovery annotation can hide / show its per-method lines in sync.
+    private boolean showCombined = true;
+    private boolean showPaired   = true;
+    private boolean showLower    = true;
+
+    // Re-entry guard for the AxisChangeListener: setTickUnit /
+    // setNumberFormatOverride inside the listener fire fresh AxisChangeEvents
+    // that would otherwise loop back into the listener.
+    private boolean axisUpdating;
+
+    // Whether the current FDP CSV actually contains each upper-bound method.
+    // Needed alongside showCombined/Paired to decide if exactly one upper-bound
+    // series is currently on the chart — which triggers an automatic rename
+    // to "Upper bound" in both the legend and the discovery annotation.
+    private boolean dataHasCombined;
+    private boolean dataHasPaired;
+
+    /** One line of the discovery-text block, tagged so we can filter by method. */
+    private static class AnnotationLine {
+        static final String TOTAL = "total";
+        static final String COMBINED = "combined";
+        static final String PAIRED   = "paired";
+        static final String LOWER    = "lower";
+        final String text;
+        final String method;
+        AnnotationLine(String text, String method) {
+            this.text = text;
+            this.method = method;
+        }
+    }
 
     public FdpPlotPanel() {
         super(new BorderLayout(0, 8));
@@ -325,6 +377,27 @@ public class FdpPlotPanel extends JPanel {
         try {
             FdpData data = parseCsv(csv);
             chart = buildChart(data);
+            // Mirror axis-range changes from any source (mouse zoom, panel
+            // controls, double-click reset) into our tick / format / annotation
+            // refresh pipeline.
+            final XYPlot plotForListeners = chart.getXYPlot();
+            final NumberAxis xAxisForListener = (NumberAxis) plotForListeners.getDomainAxis();
+            final NumberAxis yAxisForListener = (NumberAxis) plotForListeners.getRangeAxis();
+            xAxisForListener.addChangeListener(e -> onAxisChanged(xAxisForListener));
+            yAxisForListener.addChangeListener(e -> onAxisChanged(yAxisForListener));
+            // Compute the discovery-annotation text once; positions get
+            // re-derived from the current axis bounds whenever those change,
+            // and per-method lines are hidden / shown in sync with the
+            // controls-panel checkboxes (all default to checked here).
+            annotationLines = buildDiscoveryAnnotationLines(data);
+            textAnnotations = null;
+            showCombined = true;
+            showPaired   = true;
+            showLower    = true;
+            dataHasCombined = data.hasCombined();
+            dataHasPaired   = data.hasPaired();
+            refreshLegendLabels();
+            positionDiscoveryAnnotation();
             // Original axis bounds set by buildChart — captured here so a
             // double-click can restore them exactly. ChartPanel.restoreAutoBounds()
             // would instead auto-fit to the dataset, which collapses the x-axis
@@ -334,25 +407,37 @@ public class FdpPlotPanel extends JPanel {
             ChartPanel newPanel = new ChartPanel(chart, true, true, true, true, true);
             newPanel.setPreferredSize(new Dimension(640, 480));
             newPanel.setMouseWheelEnabled(true);
+
+            JPanel controls = buildPlotControls(data, initialMax);
+
             newPanel.addMouseListener(new java.awt.event.MouseAdapter() {
                 @Override
                 public void mouseClicked(java.awt.event.MouseEvent e) {
                     if (e.getClickCount() == 2
                             && SwingUtilities.isLeftMouseButton(e)) {
-                        XYPlot plot = chart.getXYPlot();
-                        plot.getDomainAxis().setRange(0, initialMax);
-                        plot.getRangeAxis().setRange(0, initialMax);
+                        // Flip both axes back to Auto so the controls panel
+                        // and the chart stay in sync after the reset.
+                        if (xAutoBtn != null) xAutoBtn.setSelected(true);
+                        if (yAutoBtn != null) yAutoBtn.setSelected(true);
+                        if (applyXRange != null) applyXRange.run();
+                        if (applyYRange != null) applyYRange.run();
                     }
                 }
             });
 
-            if (chartPanel != null) {
-                remove(chartPanel);
+            JPanel container = new JPanel(new BorderLayout(0, 0));
+            container.setOpaque(false);
+            container.add(newPanel, BorderLayout.CENTER);
+            container.add(controls, BorderLayout.EAST);
+
+            if (chartContainer != null) {
+                remove(chartContainer);
             } else {
                 remove(placeholder);
             }
             chartPanel = newPanel;
-            add(chartPanel, BorderLayout.CENTER);
+            chartContainer = container;
+            add(chartContainer, BorderLayout.CENTER);
             saveButton.setEnabled(true);
             loadedCsv = csv;
             // Keep the file field in sync so users see which CSV is being
@@ -368,6 +453,176 @@ public class FdpPlotPanel extends JPanel {
                     "Could not parse FDP CSV: " + ex.getMessage(),
                     "Plot error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    /**
+     * Build the right-hand controls panel that drives axis ranges and per-method
+     * visibility on the currently-loaded chart.
+     */
+    private JPanel buildPlotControls(FdpData data, double initialMax) {
+        final XYPlot plot = chart.getXYPlot();
+        final NumberAxis xAxis = (NumberAxis) plot.getDomainAxis();
+        final NumberAxis yAxis = (NumberAxis) plot.getRangeAxis();
+        final XYItemRenderer renderer = plot.getRenderer();
+        final XYSeriesCollection ds = (XYSeriesCollection) plot.getDataset();
+        final int idxCombined = ds.indexOf("Combined method");
+        final int idxPaired   = ds.indexOf("Paired method");
+        final int idxLower    = ds.indexOf("Lower bound");
+
+        JPanel p = new JPanel(new GridBagLayout());
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 1, 0, 0, new Color(0xDDDDDD)),
+                BorderFactory.createEmptyBorder(10, 12, 10, 12)));
+        p.setPreferredSize(new Dimension(180, 0));
+        GridBagConstraints g = new GridBagConstraints();
+        g.gridx = 0;
+        g.gridy = 0;
+        g.weightx = 1;
+        g.fill = GridBagConstraints.HORIZONTAL;
+        g.anchor = GridBagConstraints.NORTHWEST;
+        g.insets = new Insets(0, 0, 6, 0);
+
+        JLabel title = new JLabel("Plot settings");
+        title.setFont(title.getFont().deriveFont(Font.BOLD));
+        p.add(title, g);
+        g.gridy++;
+
+        // ---- X axis range ------------------------------------------------
+        p.add(new JLabel("X axis range"), g);
+        g.gridy++;
+        xAutoBtn   = new JRadioButton("Auto", true);
+        xCustomBtn = new JRadioButton("Custom:");
+        ButtonGroup xGroup = new ButtonGroup();
+        xGroup.add(xAutoBtn);
+        xGroup.add(xCustomBtn);
+        xCustomValue = new JSpinner(new SpinnerNumberModel(
+                Math.max(0.001, Math.min(1.0, initialMax)), 0.001, 1.0, 0.001));
+        xCustomValue.setEditor(new JSpinner.NumberEditor(xCustomValue, "0.000"));
+        xCustomValue.setEnabled(false);
+
+        g.insets = new Insets(0, 8, 2, 0);
+        p.add(xAutoBtn, g);
+        g.gridy++;
+        JPanel xCustomRow = new JPanel(new BorderLayout(4, 0));
+        xCustomRow.setOpaque(false);
+        xCustomRow.add(xCustomBtn,   BorderLayout.WEST);
+        xCustomRow.add(xCustomValue, BorderLayout.CENTER);
+        p.add(xCustomRow, g);
+        g.gridy++;
+        g.insets = new Insets(8, 0, 6, 0);
+
+        applyXRange = () -> {
+            boolean auto = xAutoBtn.isSelected();
+            xCustomValue.setEnabled(!auto);
+            double v = auto ? initialMax : ((Number) xCustomValue.getValue()).doubleValue();
+            double tick = niceTick(v);
+            xAxis.setRange(0, v);
+            xAxis.setTickUnit(new NumberTickUnit(tick));
+            applyPercentFormat(xAxis, tick);
+            positionDiscoveryAnnotation();
+        };
+        xAutoBtn.addActionListener(e -> applyXRange.run());
+        xCustomBtn.addActionListener(e -> applyXRange.run());
+        xCustomValue.addChangeListener(e -> {
+            if (xCustomBtn.isSelected()) applyXRange.run();
+        });
+
+        // ---- Y axis range ------------------------------------------------
+        p.add(new JLabel("Y axis range"), g);
+        g.gridy++;
+        yAutoBtn   = new JRadioButton("Auto", true);
+        yCustomBtn = new JRadioButton("Custom:");
+        ButtonGroup yGroup = new ButtonGroup();
+        yGroup.add(yAutoBtn);
+        yGroup.add(yCustomBtn);
+        yCustomValue = new JSpinner(new SpinnerNumberModel(
+                Math.max(0.001, Math.min(1.0, initialMax)), 0.001, 1.0, 0.001));
+        yCustomValue.setEditor(new JSpinner.NumberEditor(yCustomValue, "0.000"));
+        yCustomValue.setEnabled(false);
+
+        g.insets = new Insets(0, 8, 2, 0);
+        p.add(yAutoBtn, g);
+        g.gridy++;
+        JPanel yCustomRow = new JPanel(new BorderLayout(4, 0));
+        yCustomRow.setOpaque(false);
+        yCustomRow.add(yCustomBtn,   BorderLayout.WEST);
+        yCustomRow.add(yCustomValue, BorderLayout.CENTER);
+        p.add(yCustomRow, g);
+        g.gridy++;
+        g.insets = new Insets(8, 0, 6, 0);
+
+        applyYRange = () -> {
+            boolean auto = yAutoBtn.isSelected();
+            yCustomValue.setEnabled(!auto);
+            double v = auto ? initialMax : ((Number) yCustomValue.getValue()).doubleValue();
+            double tick = niceTick(v);
+            yAxis.setRange(0, v);
+            yAxis.setTickUnit(new NumberTickUnit(tick));
+            applyPercentFormat(yAxis, tick);
+            positionDiscoveryAnnotation();
+        };
+        yAutoBtn.addActionListener(e -> applyYRange.run());
+        yCustomBtn.addActionListener(e -> applyYRange.run());
+        yCustomValue.addChangeListener(e -> {
+            if (yCustomBtn.isSelected()) applyYRange.run();
+        });
+
+        // ---- Upper bound (combined / paired) ----------------------------
+        if (data.hasCombined() || data.hasPaired()) {
+            p.add(new JLabel("Upper bound"), g);
+            g.gridy++;
+            g.insets = new Insets(0, 8, 2, 0);
+            if (data.hasCombined() && idxCombined >= 0) {
+                JCheckBox cb = new JCheckBox("Combined", true);
+                cb.addActionListener(e -> {
+                    renderer.setSeriesVisible(idxCombined, cb.isSelected());
+                    renderer.setSeriesVisibleInLegend(idxCombined, cb.isSelected());
+                    showCombined = cb.isSelected();
+                    refreshLegendLabels();
+                    positionDiscoveryAnnotation();
+                });
+                p.add(cb, g);
+                g.gridy++;
+            }
+            if (data.hasPaired() && idxPaired >= 0) {
+                JCheckBox cb = new JCheckBox("Paired", true);
+                cb.addActionListener(e -> {
+                    renderer.setSeriesVisible(idxPaired, cb.isSelected());
+                    renderer.setSeriesVisibleInLegend(idxPaired, cb.isSelected());
+                    showPaired = cb.isSelected();
+                    refreshLegendLabels();
+                    positionDiscoveryAnnotation();
+                });
+                p.add(cb, g);
+                g.gridy++;
+            }
+
+            g.insets = new Insets(8, 0, 6, 0);
+        }
+
+        // ---- Lower bound -------------------------------------------------
+        if (data.hasLower() && idxLower >= 0) {
+            JCheckBox cb = new JCheckBox("Lower bound", true);
+            // Render as "Lower bound [box]" — the label sits left of the
+            // indicator so this top-level toggle reads differently from the
+            // indented Upper-bound sub-checkboxes above.
+            cb.setHorizontalTextPosition(SwingConstants.LEFT);
+            cb.addActionListener(e -> {
+                renderer.setSeriesVisible(idxLower, cb.isSelected());
+                renderer.setSeriesVisibleInLegend(idxLower, cb.isSelected());
+                showLower = cb.isSelected();
+                positionDiscoveryAnnotation();
+            });
+            p.add(cb, g);
+            g.gridy++;
+        }
+
+        // Push remaining vertical slack to the bottom so controls hug the top.
+        g.weighty = 1;
+        g.fill = GridBagConstraints.BOTH;
+        p.add(new JPanel() {{ setOpaque(false); }}, g);
+
+        return p;
     }
 
     private void saveImage() {
@@ -796,21 +1051,22 @@ public class FdpPlotPanel extends JPanel {
         double max = Math.max(data.maxFdp, 0.05);
         NumberAxis xAxis = (NumberAxis) plot.getDomainAxis();
         NumberAxis yAxis = (NumberAxis) plot.getRangeAxis();
-        NumberFormat pct = NumberFormat.getPercentInstance(Locale.US);
-        pct.setMaximumFractionDigits(0);
-        xAxis.setNumberFormatOverride(pct);
-        yAxis.setNumberFormatOverride(pct);
+        double initialTick = niceTick(max);
         xAxis.setRange(0, max);
         yAxis.setRange(0, max);
-        xAxis.setTickUnit(new NumberTickUnit(niceTick(max)));
-        yAxis.setTickUnit(new NumberTickUnit(niceTick(max)));
+        xAxis.setTickUnit(new NumberTickUnit(initialTick));
+        yAxis.setTickUnit(new NumberTickUnit(initialTick));
+        applyPercentFormat(xAxis, initialTick);
+        applyPercentFormat(yAxis, initialTick);
         xAxis.setLabelFont(AXIS_LABEL_FONT);
         yAxis.setLabelFont(AXIS_LABEL_FONT);
         xAxis.setTickLabelFont(TICK_FONT);
         yAxis.setTickLabelFont(TICK_FONT);
 
         // Diagonal y = x reference (gray) and vertical FDR=1% guide (blue, dashed).
-        plot.addAnnotation(new XYLineAnnotation(0, 0, max, max,
+        // Extend the diagonal to the full unit square so it stays visible even
+        // when the user zooms the axes out past the initial data-derived max.
+        plot.addAnnotation(new XYLineAnnotation(0, 0, 1.0, 1.0,
                 new BasicStroke(1.0f), COLOR_REFERENCE));
         ValueMarker fdrMarker = new ValueMarker(0.01);
         fdrMarker.setPaint(COLOR_FDR_LINE);
@@ -818,8 +1074,8 @@ public class FdpPlotPanel extends JPanel {
                 BasicStroke.JOIN_MITER, 1.0f, new float[]{4f, 4f}, 0f));
         plot.addDomainMarker(fdrMarker);
 
-        // Annotation block: total discoveries at q ≤ 0.01 plus per-method FDP.
-        addDiscoveryAnnotation(plot, data, max);
+        // Discovery text annotations are added by the caller (loadFromCsv) so
+        // they can be repositioned later when the user changes the axis range.
 
         // Move the legend inside the plot at roughly the lower-right corner —
         // close to the R script's legend.position = c(0.7, 0.16).
@@ -835,15 +1091,81 @@ public class FdpPlotPanel extends JPanel {
     }
 
     private static double niceTick(double range) {
-        if (range <= 0.02) return 0.005;
-        if (range <= 0.05) return 0.01;
-        if (range <= 0.10) return 0.02;
-        if (range <= 0.25) return 0.05;
-        if (range <= 0.50) return 0.10;
+        // Extra-fine entries cover mouse-rubber-band zooms into very tight
+        // windows; without them a tick stride of 0.005 sits outside any
+        // sub-0.005 range, the axis renders no ticks, and the labels vanish.
+        if (range <= 0.0001) return 0.00002;
+        if (range <= 0.0002) return 0.00005;
+        if (range <= 0.0005) return 0.0001;
+        if (range <= 0.001)  return 0.0002;
+        if (range <= 0.002)  return 0.0005;
+        if (range <= 0.005)  return 0.001;
+        if (range <= 0.01)   return 0.002;
+        if (range <= 0.02)   return 0.005;
+        if (range <= 0.05)   return 0.01;
+        if (range <= 0.10)   return 0.02;
+        if (range <= 0.25)   return 0.05;
+        if (range <= 0.50)   return 0.10;
         return 0.20;
     }
 
-    private static void addDiscoveryAnnotation(XYPlot plot, FdpData data, double max) {
+    /**
+     * Fraction digits the percent formatter must show to render the given
+     * tick unambiguously. A 0.005 tick (0.5%) would otherwise round to "0%".
+     */
+    private static int fractionDigitsForTick(double tick) {
+        double pctTick = tick * 100.0;
+        if (pctTick >= 1.0)     return 0;
+        if (pctTick >= 0.1)     return 1;
+        if (pctTick >= 0.01)    return 2;
+        if (pctTick >= 0.001)   return 3;
+        if (pctTick >= 0.0001)  return 4;
+        return 5;
+    }
+
+    /**
+     * Set the axis's percent formatter to use just enough fraction digits to
+     * keep every tick label distinct from the next. Re-applied whenever the
+     * range changes so zoomed-in axes (e.g. X max = 1%) don't collapse their
+     * mid-axis tick to "0%".
+     */
+    private static void applyPercentFormat(NumberAxis axis, double tick) {
+        NumberFormat fmt = NumberFormat.getPercentInstance(Locale.US);
+        fmt.setMaximumFractionDigits(fractionDigitsForTick(tick));
+        axis.setNumberFormatOverride(fmt);
+    }
+
+    /**
+     * Called whenever an axis range changes — from the controls-panel
+     * radios/spinners, the double-click reset, or JFreeChart's built-in
+     * mouse-rubber-band zoom. Recomputes the tick stride and formatter
+     * precision for the new range, and reflows the discovery annotation
+     * so it stays anchored to the visible top-left.
+     */
+    private void onAxisChanged(NumberAxis axis) {
+        if (axisUpdating) return;
+        double span = axis.getUpperBound() - axis.getLowerBound();
+        if (span <= 0) return;
+        axisUpdating = true;
+        try {
+            double tick = niceTick(span);
+            if (axis.getTickUnit() == null
+                    || Math.abs(axis.getTickUnit().getSize() - tick) > 1e-12) {
+                axis.setTickUnit(new NumberTickUnit(tick));
+            }
+            applyPercentFormat(axis, tick);
+            positionDiscoveryAnnotation();
+        } finally {
+            axisUpdating = false;
+        }
+    }
+
+    /**
+     * Compute the per-method FDP text block reported in the chart annotation.
+     * The lines are returned in display order, tagged by method so callers
+     * can filter them when the matching series is toggled off in the panel.
+     */
+    private static List<AnnotationLine> buildDiscoveryAnnotationLines(FdpData data) {
         int discoveries = 0;
         double combinedAt001 = Double.NaN;
         double pairedAt001   = Double.NaN;
@@ -860,33 +1182,128 @@ public class FdpPlotPanel extends JPanel {
                 if (data.hasLower())    lowerAt001    = valueAt(row, data.lowerIdx);
             }
         }
+        List<AnnotationLine> lines = new ArrayList<>();
         if (discoveries == 0) {
-            return;
+            return lines;
         }
-        StringBuilder text = new StringBuilder();
-        text.append("Total discoveries: ").append(discoveries);
+        lines.add(new AnnotationLine("Total discoveries: " + discoveries,
+                AnnotationLine.TOTAL));
         if (data.hasCombined() && !Double.isNaN(combinedAt001)) {
-            text.append("\nCombined method: ").append(formatPct(combinedAt001));
+            lines.add(new AnnotationLine("Combined method: " + formatPct(combinedAt001),
+                    AnnotationLine.COMBINED));
         }
         if (data.hasPaired() && !Double.isNaN(pairedAt001)) {
-            text.append("\nPaired method: ").append(formatPct(pairedAt001));
+            lines.add(new AnnotationLine("Paired method: " + formatPct(pairedAt001),
+                    AnnotationLine.PAIRED));
         }
         if (data.hasLower() && !Double.isNaN(lowerAt001)) {
-            text.append("\nLower bound: ").append(formatPct(lowerAt001));
+            lines.add(new AnnotationLine("Lower bound: " + formatPct(lowerAt001),
+                    AnnotationLine.LOWER));
         }
+        return lines;
+    }
 
-        double x = (Math.abs(max - 0.01) <= 0.02) ? max * 0.10 : 0.0105;
-        double y = max * 0.92;
+    private boolean lineVisible(AnnotationLine ln) {
+        switch (ln.method) {
+            case AnnotationLine.COMBINED: return showCombined;
+            case AnnotationLine.PAIRED:   return showPaired;
+            case AnnotationLine.LOWER:    return showLower;
+            default:                      return true;
+        }
+    }
+
+    /**
+     * True when exactly one upper-bound method is currently rendered on the
+     * chart — either the data only contains one of them, or both are present
+     * but the user has unchecked the other in the controls panel.
+     */
+    private boolean exactlyOneUpperBoundVisible() {
+        boolean combinedVisible = dataHasCombined && showCombined;
+        boolean pairedVisible   = dataHasPaired   && showPaired;
+        return combinedVisible ^ pairedVisible;
+    }
+
+    /**
+     * Install (or re-install) a legend label generator that swaps the visible
+     * upper-bound series' name to "Upper bound" automatically whenever exactly
+     * one upper-bound series is on the chart. Re-setting the generator fires
+     * a RendererChangeEvent so the legend re-renders with fresh labels.
+     */
+    private void refreshLegendLabels() {
+        if (chart == null) return;
+        XYPlot plot = chart.getXYPlot();
+        XYItemRenderer renderer = plot.getRenderer();
+        renderer.setLegendItemLabelGenerator(
+                new org.jfree.chart.labels.StandardXYSeriesLabelGenerator() {
+                    @Override
+                    public String generateLabel(org.jfree.data.xy.XYDataset ds, int series) {
+                        String key = String.valueOf(ds.getSeriesKey(series));
+                        if (exactlyOneUpperBoundVisible()
+                                && ("Combined method".equals(key)
+                                        || "Paired method".equals(key))) {
+                            return "Upper bound";
+                        }
+                        return key;
+                    }
+                });
+    }
+
+    /**
+     * Remove any previously-placed discovery annotations and re-add them at
+     * positions derived from the current axis bounds, so the block always
+     * lands near the top-left of the visible plot area. Lines whose method
+     * is toggled off in the controls panel are skipped.
+     */
+    private void positionDiscoveryAnnotation() {
+        if (chart == null || annotationLines == null || annotationLines.isEmpty()) {
+            return;
+        }
+        XYPlot plot = chart.getXYPlot();
+        if (textAnnotations != null) {
+            for (XYTextAnnotation a : textAnnotations) {
+                plot.removeAnnotation(a);
+            }
+        }
+        textAnnotations = new ArrayList<>();
+        double xLo = plot.getDomainAxis().getLowerBound();
+        double xHi = plot.getDomainAxis().getUpperBound();
+        double yLo = plot.getRangeAxis().getLowerBound();
+        double yHi = plot.getRangeAxis().getUpperBound();
+        double xSpan = xHi - xLo;
+        double ySpan = yHi - yLo;
+        // X anchor: park just past the FDR=1% guide (0.0105) when that point
+        // sits in the LEFT HALF of the visible x-range — that leaves enough
+        // room for the text to render without clipping on the right edge.
+        // Otherwise (1% guide near the right side, or 1% out of view entirely)
+        // fall back to 5% in from the visible left edge.
+        boolean useGuideAnchor = xLo <= 0.0105 && 0.0105 <= xHi
+                && (0.0105 - xLo) <= 0.5 * xSpan;
+        double x = useGuideAnchor ? 0.0105 : xLo + 0.05 * xSpan;
+        // Y anchor scales with the visible y-span so the block hugs the
+        // top of the visible region regardless of where it starts.
+        double y = yLo + 0.92 * ySpan;
+        double lineStep = 0.06 * ySpan;
         // JFreeChart can't render multi-line in a single XYTextAnnotation, so
-        // stack one annotation per line.
-        String[] lines = text.toString().split("\n");
-        double lineStep = max * 0.06;
-        for (int i = 0; i < lines.length; i++) {
-            XYTextAnnotation ann = new XYTextAnnotation(lines[i], x, y - i * lineStep);
+        // stack one annotation per visible line. Hidden lines are skipped so
+        // the block stays compact when methods are toggled off.
+        int row = 0;
+        boolean relabel = exactlyOneUpperBoundVisible();
+        for (AnnotationLine ln : annotationLines) {
+            if (!lineVisible(ln)) continue;
+            String displayText = ln.text;
+            if (relabel && AnnotationLine.COMBINED.equals(ln.method)) {
+                displayText = displayText.replaceFirst("Combined method:", "Upper bound:");
+            } else if (relabel && AnnotationLine.PAIRED.equals(ln.method)) {
+                displayText = displayText.replaceFirst("Paired method:", "Upper bound:");
+            }
+            XYTextAnnotation ann = new XYTextAnnotation(
+                    displayText, x, y - row * lineStep);
             ann.setTextAnchor(org.jfree.chart.ui.TextAnchor.TOP_LEFT);
             ann.setFont(ANNOTATION_FONT);
             ann.setPaint(Color.BLACK);
             plot.addAnnotation(ann);
+            textAnnotations.add(ann);
+            row++;
         }
     }
 
