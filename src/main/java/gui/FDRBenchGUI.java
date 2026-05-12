@@ -934,20 +934,22 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(peptideLengthLabel, gbc);
-        // BoxLayout (no leading hgap, unlike FlowLayout) keeps the first
-        // spinner flush against the cell's left edge so it lines up with the
-        // Enzyme / Missed Cleavages / Fold fields above and below.
-        JPanel lengthPanel = new JPanel();
-        lengthPanel.setLayout(new BoxLayout(lengthPanel, BoxLayout.X_AXIS));
+        // GridBag with weightx=1 on each spinner so they share col 1's width
+        // equally — no trailing gap to the right of the max spinner, while
+        // the min spinner still aligns flush left with the rows above/below.
+        JPanel lengthPanel = new JPanel(new GridBagLayout());
         lengthPanel.setOpaque(false);
         minLengthSpinner = createSpinner(7, 1, 50, 1);
         maxLengthSpinner = createSpinner(35, 1, 100, 1);
-        lengthPanel.add(minLengthSpinner);
-        lengthPanel.add(Box.createHorizontalStrut(5));
-        lengthPanel.add(new JLabel("-"));
-        lengthPanel.add(Box.createHorizontalStrut(5));
-        lengthPanel.add(maxLengthSpinner);
-        lengthPanel.add(Box.createHorizontalGlue());
+        GridBagConstraints lgc = new GridBagConstraints();
+        lgc.fill = GridBagConstraints.HORIZONTAL;
+        lgc.gridy = 0;
+        lgc.gridx = 0; lgc.weightx = 1; lgc.insets = new Insets(0, 0, 0, 0);
+        lengthPanel.add(minLengthSpinner, lgc);
+        lgc.gridx = 1; lgc.weightx = 0; lgc.insets = new Insets(0, 5, 0, 5);
+        lengthPanel.add(new JLabel("-"), lgc);
+        lgc.gridx = 2; lgc.weightx = 1; lgc.insets = new Insets(0, 0, 0, 0);
+        lengthPanel.add(maxLengthSpinner, lgc);
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(lengthPanel, gbc);
@@ -1114,73 +1116,125 @@ public class FDRBenchGUI extends JFrame {
         panel.add(seedSpinner, gbc);
         row++;
 
+        // Entrapment Label + Pos share a row: text field grows, inline
+        // "Pos:" label and the position dropdown sit flush right.
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(createLabel("Entrapment Label:", "Label for entrapment peptides"), gbc);
         entrapmentLabelField = createTextField("_p_target");
         entrapmentLabelField.setText("_p_target");
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        panel.add(entrapmentLabelField, gbc);
-        row++;
-
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0;
-        panel.add(createLabel("Entrapment Label Pos:", "Position of the entrapment label"), gbc);
         entrapmentPosCombo = new JComboBox<>(new String[] { "End", "Start" });
         entrapmentPosCombo.setSelectedIndex(0);
         styleComboBox(entrapmentPosCombo);
+        // Field and combo share col 1 with equal widths: 3-cell GridBag,
+        // weightx=1 on both, preferred widths forced to 0 so the weightx
+        // distribution dominates (otherwise the field's 200-px default
+        // preferred width would make it noticeably wider than the combo).
+        entrapmentLabelField.setPreferredSize(new Dimension(0,
+                entrapmentLabelField.getPreferredSize().height));
+        entrapmentPosCombo.setPreferredSize(new Dimension(0,
+                entrapmentPosCombo.getPreferredSize().height));
+        JPanel entrapmentRow = new JPanel(new GridBagLayout());
+        entrapmentRow.setOpaque(false);
+        GridBagConstraints egc = new GridBagConstraints();
+        egc.fill = GridBagConstraints.HORIZONTAL;
+        egc.gridy = 0;
+        egc.gridx = 0; egc.weightx = 1; egc.insets = new Insets(0, 0, 0, 8);
+        entrapmentRow.add(entrapmentLabelField, egc);
+        egc.gridx = 1; egc.weightx = 0; egc.insets = new Insets(0, 0, 0, 4);
+        entrapmentRow.add(createLabel("Label Position:",
+                "Position of the entrapment label"), egc);
+        egc.gridx = 2; egc.weightx = 1; egc.insets = new Insets(0, 0, 0, 0);
+        entrapmentRow.add(entrapmentPosCombo, egc);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(entrapmentPosCombo, gbc);
+        panel.add(entrapmentRow, gbc);
         row++;
 
-        // Add Decoys gates the two decoy-label rows below — when unchecked,
-        // those rows are hidden because their values aren't sent to the CLI.
-        // The whole Add Decoys row is itself only meaningful for Random
-        // Shuffling generation — Foreign Species runs don't generate decoys
-        // for the entrapment proteins they import, so the flag has no effect.
+        // Add Decoys + Decoy Label + Pos share one row. When the checkbox is
+        // unchecked, the inline decoy label/pos controls hide themselves but
+        // the row (checkbox) remains visible. The whole row is itself only
+        // meaningful for Random Shuffling generation — Foreign Species runs
+        // don't generate decoys for the entrapment proteins they import.
         JLabel addDecoysLbl = createLabel("Add Decoys:",
                 "Add decoy sequences to the generated output (Random "
                         + "Shuffling generation only).");
+        decoyCheckbox = new JCheckBox();
+        decoyLabelField = createTextField("rev_");
+        decoyLabelField.setText("rev_");
+        decoyPosCombo = new JComboBox<>(new String[] { "Start", "End" });
+        decoyPosCombo.setSelectedIndex(0);
+        styleComboBox(decoyPosCombo);
+        JLabel decoyLabelLbl = createLabel("Decoy Label:", "Label for decoy sequences");
+        JLabel decoyPosLbl   = createLabel("Label Position:", "Position of the decoy label");
+
+        // Pin checkbox height so the row height stays constant whether the
+        // decoy details are visible or hidden — otherwise the row would
+        // collapse to the checkbox's smaller natural height.
+        Dimension cbSize = decoyCheckbox.getPreferredSize();
+        decoyCheckbox.setPreferredSize(new Dimension(
+                cbSize.width, decoyLabelField.getPreferredSize().height));
+        // Force field/combo preferred widths to 0 so weightx=1 distribution
+        // drives the actual widths — both halves end up equal regardless of
+        // natural preferred widths.
+        decoyLabelField.setPreferredSize(new Dimension(0,
+                decoyLabelField.getPreferredSize().height));
+        decoyPosCombo.setPreferredSize(new Dimension(0,
+                decoyPosCombo.getPreferredSize().height));
+
+        // Left half = [checkbox][Decoy Label:][field]. Checkbox lives here so
+        // it sits flush at the very left of col 1 (aligned with the other
+        // panel checkboxes), and stays visible even when the rest of the
+        // decoy details are hidden.
+        //
+        // Use nested BorderLayouts (not GridBag): when the inner controls
+        // are hidden, GridBagLayout has no weighted visible cells and
+        // centers the lone visible component within its container — which
+        // pushed the checkbox to the middle of col 1. BorderLayout never
+        // auto-centers, so WEST stays anchored to the left.
+        JPanel decoyInner = new JPanel(new BorderLayout(4, 0));
+        decoyInner.setOpaque(false);
+        decoyInner.add(decoyLabelLbl, BorderLayout.WEST);
+        decoyInner.add(decoyLabelField, BorderLayout.CENTER);
+
+        JPanel decoyLeftHalf = new JPanel(new BorderLayout(8, 0));
+        decoyLeftHalf.setOpaque(false);
+        decoyLeftHalf.add(decoyCheckbox, BorderLayout.WEST);
+        decoyLeftHalf.add(decoyInner, BorderLayout.CENTER);
+        // Override the half's preferred width to 0 so the outer GridBag's
+        // weightx=1 distribution makes both halves the same width.
+        decoyLeftHalf.setPreferredSize(new Dimension(0,
+                decoyLabelField.getPreferredSize().height));
+
+        // Outer 3-cell GridBag: [leftHalf | "Label Position:" | combo].
+        // Equal weightx and 0 preferreds → identical halves; "Label Position:"
+        // sits exactly at the visible seam, mirroring the entrapment row.
+        JPanel decoyRowControls = new JPanel(new GridBagLayout());
+        decoyRowControls.setOpaque(false);
+        GridBagConstraints ddgc = new GridBagConstraints();
+        ddgc.fill = GridBagConstraints.HORIZONTAL;
+        ddgc.gridy = 0;
+        ddgc.gridx = 0; ddgc.weightx = 1; ddgc.insets = new Insets(0, 0, 0, 8);
+        decoyRowControls.add(decoyLeftHalf, ddgc);
+        ddgc.gridx = 1; ddgc.weightx = 0; ddgc.insets = new Insets(0, 0, 0, 4);
+        decoyRowControls.add(decoyPosLbl, ddgc);
+        ddgc.gridx = 2; ddgc.weightx = 1; ddgc.insets = new Insets(0, 0, 0, 0);
+        decoyRowControls.add(decoyPosCombo, ddgc);
+
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(addDecoysLbl, gbc);
-        decoyCheckbox = new JCheckBox();
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(decoyCheckbox, gbc);
+        panel.add(decoyRowControls, gbc);
         row++;
 
-        JLabel decoyLabelLbl = createLabel("Decoy Label:", "Label for decoy sequences");
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0;
-        panel.add(decoyLabelLbl, gbc);
-        decoyLabelField = createTextField("rev_");
-        decoyLabelField.setText("rev_");
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        panel.add(decoyLabelField, gbc);
-        row++;
-
-        JLabel decoyPosLbl = createLabel("Decoy Label Pos:", "Position of the decoy label");
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0;
-        panel.add(decoyPosLbl, gbc);
-        decoyPosCombo = new JComboBox<>(new String[] { "Start", "End" });
-        decoyPosCombo.setSelectedIndex(0);
-        styleComboBox(decoyPosCombo);
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        panel.add(decoyPosCombo, gbc);
-        row++;
-
-        addDecoysRowComponents = java.util.Arrays.asList(addDecoysLbl, decoyCheckbox);
+        addDecoysRowComponents = java.util.Arrays.asList(addDecoysLbl, decoyRowControls);
+        // Hide just the inner controls (label/field/pos label/combo) when
+        // Add Decoys is unchecked. Checkbox is NOT in this list so it stays
+        // visible at the left of leftHalf.
         decoyLabelRowComponents = java.util.Arrays.asList(
                 decoyLabelLbl, decoyLabelField, decoyPosLbl, decoyPosCombo);
         decoyCheckbox.addActionListener(e -> updateDecoyLabelVisibility());
@@ -1281,6 +1335,8 @@ public class FDRBenchGUI extends JFrame {
         gbc.insets = DEFAULT_INSETS;
         int row = 0;
 
+        // Score Column + Score Direction share a row: the column dropdown
+        // grows; "Direction:" label and direction dropdown sit flush right.
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
@@ -1292,20 +1348,32 @@ public class FDRBenchGUI extends JFrame {
         scoreColumnCombo.setEditable(false);
         scoreColumnCombo.setSelectedItem(NO_SCORE_ITEM);
         styleComboBox(scoreColumnCombo);
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        panel.add(scoreColumnCombo, gbc);
-        row++;
-
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0;
-        panel.add(createLabel("Score Direction:", "Whether lower or higher scores are better"), gbc);
         scoreDirectionCombo = new JComboBox<>(new String[] { "Lower is better", "Higher is better" });
         styleComboBox(scoreDirectionCombo);
+        // 3-cell GridBag: combo | "Direction:" | combo. Both combos use
+        // weightx=1 AND have their preferred widths forced to 0 so the
+        // weightx distribution drives the final widths — they end up equal
+        // regardless of differences in the items' natural widths.
+        scoreColumnCombo.setPreferredSize(new Dimension(0,
+                scoreColumnCombo.getPreferredSize().height));
+        scoreDirectionCombo.setPreferredSize(new Dimension(0,
+                scoreDirectionCombo.getPreferredSize().height));
+        JLabel scoreDirInlineLbl = createLabel("Direction:",
+                "Whether lower or higher scores are better");
+        JPanel scoreRow = new JPanel(new GridBagLayout());
+        scoreRow.setOpaque(false);
+        GridBagConstraints sgc = new GridBagConstraints();
+        sgc.fill = GridBagConstraints.HORIZONTAL;
+        sgc.gridy = 0;
+        sgc.gridx = 0; sgc.weightx = 1; sgc.insets = new Insets(0, 0, 0, 8);
+        scoreRow.add(scoreColumnCombo, sgc);
+        sgc.gridx = 1; sgc.weightx = 0; sgc.insets = new Insets(0, 0, 0, 4);
+        scoreRow.add(scoreDirInlineLbl, sgc);
+        sgc.gridx = 2; sgc.weightx = 1; sgc.insets = new Insets(0, 0, 0, 0);
+        scoreRow.add(scoreDirectionCombo, sgc);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(scoreDirectionCombo, gbc);
+        panel.add(scoreRow, gbc);
         row++;
 
         JLabel fdpFoldLabel = createLabel("Fold:",
@@ -1339,7 +1407,8 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
-        panel.add(createLabel("Pick Method:", "How to pick one protein from a group"), gbc);
+        panel.add(createLabel("Pick Method:", "How to pick one representative protein from a protein group.\n" +
+                "Proteins in the same protein group are separated by ';'."), gbc);
         pickMethodCombo = new JComboBox<>(new String[] { "first", "last", "random", "as_is" });
         styleComboBox(pickMethodCombo);
         gbc.gridx = 1;
@@ -1347,6 +1416,7 @@ public class FDRBenchGUI extends JFrame {
         panel.add(pickMethodCombo, gbc);
         row++;
 
+        // Entrapment Label + Pos share a row, mirroring the DB-gen panel.
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
@@ -1356,22 +1426,42 @@ public class FDRBenchGUI extends JFrame {
                         + "when generating the entrapment database."), gbc);
         fdpEntrapmentLabelField = createTextField("_p_target");
         fdpEntrapmentLabelField.setText("_p_target");
-        gbc.gridx = 1;
-        gbc.weightx = 1;
-        panel.add(fdpEntrapmentLabelField, gbc);
-        row++;
-
-        gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 0;
-        panel.add(createLabel("Entrapment Label Pos:",
-                "Position of the entrapment label on the protein ID."), gbc);
         fdpEntrapmentPosCombo = new JComboBox<>(new String[] { "End", "Start" });
         fdpEntrapmentPosCombo.setSelectedIndex(0);
         styleComboBox(fdpEntrapmentPosCombo);
+        // Field and combo share col 1 with equal widths — same trick as the
+        // DB-gen entrapment row.
+        fdpEntrapmentLabelField.setPreferredSize(new Dimension(0,
+                fdpEntrapmentLabelField.getPreferredSize().height));
+        fdpEntrapmentPosCombo.setPreferredSize(new Dimension(0,
+                fdpEntrapmentPosCombo.getPreferredSize().height));
+        JLabel labelPosInlineLbl = createLabel("Label Position:",
+                "Position of the entrapment label on the protein ID.");
+        // Align the two combined rows: pad the narrower inline label so its
+        // width matches the wider one ("Label Position:" vs "Direction:").
+        // Without this, the right-hand combos start at different X positions
+        // on the Score row and the Entrapment row.
+        int inlineLabelWidth = Math.max(
+                scoreDirInlineLbl.getPreferredSize().width,
+                labelPosInlineLbl.getPreferredSize().width);
+        scoreDirInlineLbl.setPreferredSize(new Dimension(inlineLabelWidth,
+                scoreDirInlineLbl.getPreferredSize().height));
+        labelPosInlineLbl.setPreferredSize(new Dimension(inlineLabelWidth,
+                labelPosInlineLbl.getPreferredSize().height));
+        JPanel fdpEntrapmentRow = new JPanel(new GridBagLayout());
+        fdpEntrapmentRow.setOpaque(false);
+        GridBagConstraints fgc = new GridBagConstraints();
+        fgc.fill = GridBagConstraints.HORIZONTAL;
+        fgc.gridy = 0;
+        fgc.gridx = 0; fgc.weightx = 1; fgc.insets = new Insets(0, 0, 0, 8);
+        fdpEntrapmentRow.add(fdpEntrapmentLabelField, fgc);
+        fgc.gridx = 1; fgc.weightx = 0; fgc.insets = new Insets(0, 0, 0, 4);
+        fdpEntrapmentRow.add(labelPosInlineLbl, fgc);
+        fgc.gridx = 2; fgc.weightx = 1; fgc.insets = new Insets(0, 0, 0, 0);
+        fdpEntrapmentRow.add(fdpEntrapmentPosCombo, fgc);
         gbc.gridx = 1;
         gbc.weightx = 1;
-        panel.add(fdpEntrapmentPosCombo, gbc);
+        panel.add(fdpEntrapmentRow, gbc);
 
         return panel;
     }
