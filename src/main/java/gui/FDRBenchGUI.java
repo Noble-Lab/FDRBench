@@ -1408,7 +1408,11 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(createLabel("Pick Method:", "How to pick one representative protein from a protein group.\n" +
-                "Proteins in the same protein group are separated by ';'."), gbc);
+                "Proteins in the same protein group are separated by ';'.\n"+
+                "This is only used when (1) determine protein type (target or entrapment) for evaluating protein level FDR control;\n" +
+                "(2) determine peptide type (target or entrapment) for evaluating \n" +
+                "PSM/precursor/peptide level FDR control without \n" +
+                "providing peptide type mapping file."), gbc);
         pickMethodCombo = new JComboBox<>(new String[] { "first", "last", "random", "as_is" });
         styleComboBox(pickMethodCombo);
         gbc.gridx = 1;
