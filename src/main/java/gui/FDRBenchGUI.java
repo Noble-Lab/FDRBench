@@ -1289,7 +1289,7 @@ public class FDRBenchGUI extends JFrame {
                         + "file's numeric columns; \"none\" ranks by q_value "
                         + "alone."), gbc);
         scoreColumnCombo = new JComboBox<>(new String[] { NO_SCORE_ITEM });
-        scoreColumnCombo.setEditable(true);
+        scoreColumnCombo.setEditable(false);
         scoreColumnCombo.setSelectedItem(NO_SCORE_ITEM);
         styleComboBox(scoreColumnCombo);
         gbc.gridx = 1;
