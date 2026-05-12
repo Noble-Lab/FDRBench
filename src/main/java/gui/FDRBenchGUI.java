@@ -2743,25 +2743,44 @@ public class FDRBenchGUI extends JFrame {
     }
 
     private String resolveJarPath() {
+        // First: ask the ClassLoader where this class actually came from.
+        // When launched via "java -jar /abs/path/foo.jar", the protection
+        // domain reports the JAR's absolute URL — which is what we must pass
+        // to the subprocess so it works regardless of the user's CWD. The
+        // CWD heuristics below only help for IDE runs (classes/, not a JAR)
+        // and shouldn't shadow the truth from the ClassLoader.
+        try {
+            java.security.CodeSource src = FDRBenchGUI.class
+                    .getProtectionDomain().getCodeSource();
+            if (src != null && src.getLocation() != null) {
+                File f = new File(src.getLocation().toURI());
+                if (f.isFile() && f.getName().toLowerCase(Locale.ROOT).endsWith(".jar")) {
+                    return f.getAbsolutePath();
+                }
+            }
+        } catch (Exception ignored) {
+            // Fall through to CWD-based discovery (e.g. IDE runs from target/classes).
+        }
+
         // Try to find the JAR file in target/ or the same folder as the app
         File currentDir = new File(System.getProperty("user.dir"));
         List<File> jarCandidates = new ArrayList<>();
-        
+
         // Check current directory
         collectJarCandidates(currentDir, jarCandidates, 1);
-        
+
         // Check target/
         File targetDir = new File(currentDir, "target");
         if (targetDir.exists()) {
             collectJarCandidates(targetDir, jarCandidates, 2);
         }
-        
+
         if (!jarCandidates.isEmpty()) {
             // Sort by last modified to get the newest one
             jarCandidates.sort(Comparator.comparingLong(File::lastModified).reversed());
             return jarCandidates.get(0).getAbsolutePath();
         }
-        
+
         // Fallback to a default name
         return "fdrbench.jar";
     }
