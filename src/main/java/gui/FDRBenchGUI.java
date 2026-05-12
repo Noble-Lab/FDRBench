@@ -2426,33 +2426,58 @@ public class FDRBenchGUI extends JFrame {
     }
 
     /**
-     * Plain-text preview for files that aren't tabular (e.g. FASTA). Reads
-     * the first {@value #PREVIEW_TEXT_LINES} lines into a monospaced text
-     * area; the dialog title shows total line count so the user can tell
-     * how much of the file they're seeing.
+     * FASTA-record-aware preview: keeps the first {@value #PREVIEW_FASTA_ENTRIES}
+     * records and the last {@value #PREVIEW_FASTA_ENTRIES} (sliding window) so
+     * the user can spot-check both ends of large protein databases without
+     * loading the whole file. A "…" separator marks the gap when the file
+     * has more than 2 × PREVIEW_FASTA_ENTRIES records.
      */
-    private static final int PREVIEW_TEXT_LINES = 500;
+    private static final int PREVIEW_FASTA_ENTRIES = 100;
 
     private void showTextPreview(File file) {
-        StringBuilder sb = new StringBuilder();
-        int previewLines = 0;
-        long totalLines = 0;
+        java.util.List<java.util.List<String>> topRecs = new ArrayList<>();
+        java.util.Deque<java.util.List<String>> tailRecs = new java.util.ArrayDeque<>();
+        long totalRecs = 0;
         try (BufferedReader r = new BufferedReader(
                 new InputStreamReader(new java.io.FileInputStream(file),
                         java.nio.charset.StandardCharsets.UTF_8))) {
+            java.util.List<String> current = null;
             String line;
             while ((line = r.readLine()) != null) {
-                if (previewLines < PREVIEW_TEXT_LINES) {
-                    sb.append(line).append('\n');
-                    previewLines++;
+                if (line.startsWith(">")) {
+                    if (current != null) {
+                        commitFastaRecord(current, topRecs, tailRecs);
+                        totalRecs++;
+                    }
+                    current = new ArrayList<>();
+                    current.add(line);
+                } else if (current != null) {
+                    current.add(line);
                 }
-                totalLines++;
+                // Lines before the first ">" header (rare; comments etc.) are
+                // dropped — they aren't part of any record.
+            }
+            if (current != null) {
+                commitFastaRecord(current, topRecs, tailRecs);
+                totalRecs++;
             }
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this,
                     "Could not read file: " + ex.getMessage(),
                     "Read error", JOptionPane.ERROR_MESSAGE);
             return;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (java.util.List<String> rec : topRecs) {
+            for (String l : rec) sb.append(l).append('\n');
+        }
+        boolean truncated = !tailRecs.isEmpty();
+        if (truncated) {
+            sb.append("…\n");
+            for (java.util.List<String> rec : tailRecs) {
+                for (String l : rec) sb.append(l).append('\n');
+            }
         }
 
         JTextArea area = new JTextArea(sb.toString());
@@ -2464,9 +2489,26 @@ public class FDRBenchGUI extends JFrame {
         sp.setPreferredSize(new Dimension(800, 500));
         sp.setBorder(BorderFactory.createEmptyBorder());
 
+        String shown = truncated
+                ? "showing first " + topRecs.size()
+                        + " + last " + tailRecs.size()
+                : "showing all " + topRecs.size();
         String title = "Preview — " + file.getName()
-                + " (showing " + previewLines + " of " + totalLines + " lines)";
+                + " (" + shown + " of " + totalRecs + " entries)";
         JOptionPane.showMessageDialog(this, sp, title, JOptionPane.PLAIN_MESSAGE);
+    }
+
+    private static void commitFastaRecord(java.util.List<String> rec,
+            java.util.List<java.util.List<String>> topRecs,
+            java.util.Deque<java.util.List<String>> tailRecs) {
+        if (topRecs.size() < PREVIEW_FASTA_ENTRIES) {
+            topRecs.add(rec);
+        } else {
+            if (tailRecs.size() == PREVIEW_FASTA_ENTRIES) {
+                tailRecs.pollFirst();
+            }
+            tailRecs.addLast(rec);
+        }
     }
 
     /**
