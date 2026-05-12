@@ -1,19 +1,95 @@
 # [FDRBench](https://www.nature.com/articles/s41592-025-02719-x)
-**FDRBench** is a tool for false discovery rate (FDR) control evaluation in proteomics. It provides two main functions: (1) build entrapment databases using randomly shuffled target sequences or using sequences from foreign species, and (2) estimate the false discovery proportion (FDP) using the lower bound, combined, and paired methods.
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/FDRBench.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/latest/total)
+
+**FDRBench** is a tool for false discovery rate (FDR) control evaluation in proteomics. It provides two main functions: (1) build entrapment databases using randomly shuffled target sequences or using sequences from foreign species, and (2) estimate the false discovery proportion (FDP) using the lower bound, combined, and paired methods. FDRBench has been tested on identification results from a wide range of search engines, including DIA-NN, MSFragger, Spectronaut, MaxQuant, Tide, and others. More details about how FDRBench works are provided in the following manuscript:
+
+Wen, B., Freestone, J., Riffle, M. et al. [Assessment of false discovery rate control in tandem mass spectrometry analysis using entrapment](https://doi.org/10.1038/s41592-025-02719-x). *Nat Methods* 22, 1454–1463 (2025).
 
 [![FDRBench](https://media.springernature.com/full/springer-static/image/art%3A10.1038%2Fs41592-025-02719-x/MediaObjects/41592_2025_2719_Fig1_HTML.png)](https://www.nature.com/articles/s41592-025-02719-x/figures/1)
 
 
 ## Installation
 
-FDRBench is written using Java and can be run on Windows, Mac OS and Linux. Only Java is required to be installed to run FDRBench. If java is not installed, please install Java by following the instruction at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After java is installed, FDRBench can be downloaded at https://github.com/Noble-Lab/FDRBench/releases.
+### Using the FDRBench graphical user interface (recommended)
+
+FDRBench provides a standalone graphical user interface (GUI) for Windows, Linux and macOS. You can install it from the `.msi` (Windows) package available on the [GitHub Releases](https://github.com/Noble-Lab/FDRBench/releases) page. For Linux and macOS, use the ZIP package instead. After installation on Windows, launch FDRBench from the Start menu and use the GUI to configure inputs, parameters, and output locations for entrapment database generation and FDP estimation without using the command line. No Java is required if FDRBench is installed using the `.msi` installer. For Linux and macOS, FDRBench can be run using the command line (see below) to launch the GUI.
+
+### Using FDRBench through the command line
+
+FDRBench is written in Java and can run on Windows, macOS, and Linux. To run FDRBench from the command line, Java must be installed. If Java is not installed, please install it by following the instructions at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After Java is installed, FDRBench can be downloaded from https://github.com/Noble-Lab/FDRBench/releases.
 
 ## Usage
 
+### Using the FDRBench graphical user interface (recommended)
+
+#### Launch the FDRBench GUI
+
+##### Windows
+
+After FDRBench is installed using the `.msi` installer, launch the GUI by clicking the FDRBench icon in the Start menu or the desktop shortcut.
+
+##### Linux or macOS
+
+On Linux or macOS, launch the GUI from the command line:
+
+```shell
+java -jar fdrbench-1.0.0.jar
 ```
-$ java -jar fdrbench-0.0.2.jar
+
+The FDRBench GUI:
+
+ <img src="docs/images/FDRBenchGUI.png" alt="FDRBench GUI" width="70%">
+
+In the FDRBench GUI, hover the mouse pointer over a field label, input box, or button to display a tooltip with additional help about that option.
+
+The GUI supports the two main FDRBench workflows:
+
+1. Entrapment database generation;
+2. FDP estimation / FDR control evaluation.
+
+#### Workflow 1: Entrapment database generation
+
+Use this workflow to build an entrapment database from a target protein FASTA. Two sequence-generation modes are supported, selected from the **Sequence Generation** dropdown:
+
+- **Random Shuffling** — entrapment sequences are derived from the target database by random shuffling. Both peptide-level and protein-level entrapment databases can be generated.
+- **Foreign Species** — entrapment sequences are taken from one or more foreign-species FASTA files supplied by the user. Both peptide-level and protein-level entrapment databases can be generated.
+
+The main inputs:
+
+1. **Protein Database**: target protein database in FASTA format. The **Download** button opens a dialog for downloading a UniProt reference proteome directly inside the GUI.
+2. **Foreign Species** (Foreign Species mode only): one or more FASTA files used as entrapment sources. Multiple files can be selected.
+3. **Output Folder**: directory where the entrapment FASTA and peptide pair file (for peptide level entrapment database generation only) are written. The output file formats are described in the [Build entrapment databases](#Build-entrapment-databases) section below.
+
+Key parameters in the workflow include the **Level** (protein or peptide), **Enzyme**, **Missed Cleavages**, **Peptide Length**, **Fold** (number of entrapment copies per target), **Fix N/C Terminal**, **Convert I to L**, **DIA-NN Format**, **UniProt Format**, **Add Decoys**, and **Check Duplicates**. The available options change automatically based on the **Level** and **Sequence Generation** selections — only the parameters that are relevant for the chosen combination are shown.
+
+After all the inputs and parameters are set, click the **Run FDRBench** button to start the run. The **Preview Command** button shows the exact command line that will be executed, which is useful for reproducibility and for switching to the command line later. During the run, console output will be shown in the **Console** tab. After the run is finished, the output folder will contain the generated entrapment FASTA file, the peptide pair `*.txt` file (peptide-level runs), and `fdrbench_log.txt`, which mirrors the console output for the run.
+
+#### Workflow 2: FDP estimation / FDR control evaluation
+
+Use this workflow to estimate the FDP of a peptide or protein detection result using the lower bound, combined, and paired methods.
+
+ <img src="docs/images/FDRBenchGUI_FDP.png" alt="FDRBench GUI FDP Estimation" width="70%">
+
+The main inputs:
+
+1. **Input File**: PSM / peptide / precursor / protein level identification file (TSV format). Decoy hits should be removed from the input file before FDP calculation. The format is described in the [FDP estimation](#FDP-calculation) section below.
+2. **Peptide Pair File** (optional): the peptide pair `*.txt` file generated in Workflow 1. Required for the paired method at the peptide or precursor level.
+3. **Output Folder**: directory where the FDP estimation result and FDP-vs-FDR plot are written. The output file format is described in the [FDP estimation](#FDP-calculation) section below..
+
+Key parameters in the workflow include the **Level** (precursor, peptide, protein, or PSM), the **Sequence Generation** mode used to build the entrapment database (Random Shuffling or Foreign Species), the **Score Column** and ranking **Direction**, the **Fold** (Random Shuffling) or **R Ratio** (Foreign Species), the **Pick Method** for protein-group handling, and the **Entrapment Label** and **Label Position** that identify entrapment sequences in the input file.
+
+After all the inputs and parameters are set, click the **Run FDRBench** button to start the run. During the run, console output will be shown in the **Console** tab. After the run is finished, the output folder will contain a CSV file with the estimated FDP values from each method (lower bound, combined, paired when using random shuffling for entrapment generation), and `fdrbench_log.txt`. The **Plot** tab in the GUI displays the FDP-vs-FDR plot and supports interactive customization of the plot (FDR range, etc.) and exporting in PNG or PDF format.
+
+ <img src="docs/images/FDRBench_plot.png" alt="FDRBench GUI" width="70%">
+
+### Using FDRBench through the command line
+
+<details>
+<summary>FDRBench command line options</summary>
+
+```
+$ java -jar fdrbench-1.0.0.jar -h
 usage: Options
  -db <arg>                 Protein database file
  -crux <arg>               The peptide list generated by Crux
@@ -64,6 +140,7 @@ usage: Options
  -debug                    Print detailed information for debugging
  -h                        Print this usage information
 ```
+</details>
 
 #### Build entrapment databases
 
@@ -72,7 +149,7 @@ usage: Options
 Generate a **peptide level** entrapment database using the human target database `UP000005640_9606.fasta` (~20k human proteins). The database can be downloaded from [UniProt](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/reference_proteomes/Eukaryota/UP000005640/UP000005640_9606.fasta.gz).
 
 ```shell
-java -jar fdrbench-0.0.1.jar -I2L -level peptide -db UP000005640_9606.fasta -o UP000005640_9606_entrapment_pep.txt -uniprot -diann -fix_nc c
+java -jar fdrbench-1.0.0.jar -I2L -level peptide -db UP000005640_9606.fasta -o UP000005640_9606_entrapment_pep.txt -uniprot -diann -fix_nc c
 ```
 Using the above command line, a peptide level entrapment database in FASTA format "UP000005640_9606_entrapment_pep.fasta" and a peptide tsv format file "UP000005640_9606_entrapment_pep.txt" will be generated:
 
@@ -127,7 +204,7 @@ The above example command line took about 30 seconds to run on a Mac MacBook com
 
 Generate a **protein level** entrapment database using the human target database `UP000005640_9606.fasta` (~20k human proteins). The database can be downloaded from [UniProt](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/reference_proteomes/Eukaryota/UP000005640/UP000005640_9606.fasta.gz):
 ```shell
-java -jar fdrbench-0.0.1.jar -level protein -db UP000005640_9606.fasta -o UP000005640_9606_I2L_entrapment.fasta -I2L -diann -uniprot -fix_nc c -check
+java -jar fdrbench-1.0.0.jar -level protein -db UP000005640_9606.fasta -o UP000005640_9606_I2L_entrapment.fasta -I2L -diann -uniprot -fix_nc c -check
 ```
 Using the above command line, a protein level entrapment database in FASTA format "UP000005640_9606_I2L_entrapment.fasta" will be generated. For each target human protein, an entrapment protein is generated.
 
@@ -149,7 +226,7 @@ The above example command line took about 10 seconds to run on a Mac MacBook com
 Generate a **peptide level** entrapment database using the human target database `UP000005640_9606.fasta` (~20k human proteins) by taking peptides from *Arabidopsis thaliana* (`UP000002311_559292.fasta`) and *Saccharomyces cerevisiae* (`UP000006548_3702.fasta`) as entrapments. The database can be downloaded from [UniProt](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/reference_proteomes/Eukaryota/UP000005640/UP000005640_9606.fasta.gz).
 
 ```shell
-java -jar fdrbench-0.0.1.jar java -db UP000005640_9606.fasta -o UP000005640_9606_I2L_foreign_species_entrapment_peptide.txt -I2L -diann -uniprot -ms UP000002311_559292.fasta,UP000006548_3702.fasta -enzyme 2 -miss_c 1 -minLength 7 -maxLength 35 -level peptide -fold 1
+java -jar fdrbench-1.0.0.jar java -db UP000005640_9606.fasta -o UP000005640_9606_I2L_foreign_species_entrapment_peptide.txt -I2L -diann -uniprot -ms UP000002311_559292.fasta,UP000006548_3702.fasta -enzyme 2 -miss_c 1 -minLength 7 -maxLength 35 -level peptide -fold 1
 ```
 
 ##### Build entrapment databases using foreign species - protein level:
@@ -157,7 +234,7 @@ java -jar fdrbench-0.0.1.jar java -db UP000005640_9606.fasta -o UP000005640_9606
 Generate a **protein level** entrapment database using the human target database `UP000005640_9606.fasta` (~20k human proteins) by taking proteins from *Arabidopsis thaliana* (`UP000002311_559292.fasta`) and *Saccharomyces cerevisiae* (`UP000006548_3702.fasta`) as entrapments. The database can be downloaded from [UniProt](https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/reference_proteomes/Eukaryota/UP000005640/UP000005640_9606.fasta.gz).
 
 ```shell
-java -jar fdrbench-0.0.1.jar java -db UP000005640_9606.fasta -o UP000005640_9606_I2L_foreign_species_entrapment_protein.fasta -I2L -diann -uniprot -ms UP000002311_559292.fasta,UP000006548_3702.fasta -enzyme 2 -miss_c 1 -minLength 7 -maxLength 35 -level protein -fold 1
+java -jar fdrbench-1.0.0.jar java -db UP000005640_9606.fasta -o UP000005640_9606_I2L_foreign_species_entrapment_protein.fasta -I2L -diann -uniprot -ms UP000002311_559292.fasta,UP000006548_3702.fasta -enzyme 2 -miss_c 1 -minLength 7 -maxLength 35 -level protein -fold 1
 ```
 
 #### FDP calculation
@@ -192,7 +269,7 @@ The required columns are described below. Decoy hits shouldn't be included in th
 Below is an example command line to run precursor FDP calculation:
 
 ```shell
-java -jar fdrbench-0.0.1.jar  -i peptide-fdp_precursor_input.tsv -fold 1 -pep UP000005640_9606_entrapment_pep.txt -level precursor -o peptide-diann_fdp_precursor.csv -score 'score:0' 
+java -jar fdrbench-1.0.0.jar  -i peptide-fdp_precursor_input.tsv -fold 1 -pep UP000005640_9606_entrapment_pep.txt -level precursor -o peptide-diann_fdp_precursor.csv -score 'score:0' 
 
 ```
 
@@ -254,7 +331,7 @@ Q8WUP2         1.64447e-4  1.64447e-4  Q8WUP2   9
 Below is an example command line to run protein FDP calculation. The database used to generate the identification result must be generated using FDRBench. The command line parameter **-score** is set to use the column "score" as a secondary ranking score in FDP calculation. The number **0** indicates lower score is better (more confident). The example file **protein-fdp_protein_input.tsv** is available in the [example](https://github.com/Noble-Lab/FDRBench/tree/master/example) folder.
 
 ```shell
-java -jar fdrbench-0.0.1.jar -i example/protein-fdp_protein_input.tsv -level protein -o protein-diann_fdp_protein.csv -score 'score:0' -fold 1 -pick first
+java -jar fdrbench-1.0.0.jar -i example/protein-fdp_protein_input.tsv -level protein -o protein-diann_fdp_protein.csv -score 'score:0' -fold 1 -pick first
 ```
 
 The output file "protein-diann_fdp_protein.csv" contains estimated FDP values using different methods. The file looks like below:
@@ -281,10 +358,10 @@ Below please find the description of the main columns in the output tsv file "pr
 
 The above example command line took about 5 seconds to run on a Mac MacBook computer.
 
-#### Visualation FDR control evaluation result
+#### Visualization of FDR control evaluation result
 
 <details>
-<summary>R function "plot_fdp_fdr" used to generate an FDP vs FDR plot</summary>
+<summary>R function "plot_fdp_fdr" used to generate an FDP vs FDR plot. The result can also be visualized using the GUI introduced above.</summary>
  
 ```R
 library(tidyverse)
@@ -449,8 +526,3 @@ The dashed vertical line is at the 1% FDR threshold, as are the numbers reported
 ## How to cite:
 
 Wen, B., Freestone, J., Riffle, M. et al. [Assessment of false discovery rate control in tandem mass spectrometry analysis using entrapment](https://doi.org/10.1038/s41592-025-02719-x). *Nat Methods* 22, 1454–1463 (2025).
-
-
-
-
-
