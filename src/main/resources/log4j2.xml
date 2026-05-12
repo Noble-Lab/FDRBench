@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Configuration status="INFO">
+<Configuration status="WARN">
     <Appenders>
         <Console name="ConsoleAppender" target="SYSTEM_OUT">
             <!--<PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n" />-->
-            <PatternLayout pattern="%highlight{%-date{yyyy-MM-dd HH:mm:ss} [%-5level] %class[%method:%line] - %message%n}" />        </Console>
+            <!-- No %highlight{}: ANSI escapes leak into the GUI console pane
+                 (a plain JTextArea), and the small benefit of colour in real
+                 terminals isn't worth the unreadable garbage there. -->
+            <PatternLayout pattern="%-date{yyyy-MM-dd HH:mm:ss} [%-5level] %class[%method:%line] - %message%n" />
+        </Console>
     </Appenders>
     <Loggers>
         <Root level="INFO">
