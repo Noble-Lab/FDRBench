@@ -168,6 +168,22 @@ public class FDREval {
      */
     public static boolean reverse_target_protein_for_entrapment_protein_generation = false;
 
+    /**
+     * Checks if a given string contains an entrapment label either at the beginning
+     * or the end, based on the configured {@code entrapment_label_position}.
+     *
+     * @param s The input string to check for the presence of the entrapment label.
+     *          It can be {@code null}.
+     * @return {@code true} if the string starts or ends with the entrapment label
+     *         based on the {@code entrapment_label_position}, {@code false} otherwise.
+     */
+    private static boolean has_entrapment_label(String s) {
+        if (s == null) return false;
+        return entrapment_label_position == Label_Position.end
+                ? s.endsWith(entrapment_label)
+                : s.startsWith(entrapment_label);
+    }
+
     public enum Label_Position {
         start("Label position: start"),
         end("Label position: end");
@@ -3126,9 +3142,9 @@ public class FDREval {
             PMatch pmatch = new PMatch();
             boolean is_entrapment = false;
             if(fdp_level.equals(FDRType.protein)){
-                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
+                pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
                 pmatch.id = pmatch.protein;
-                is_entrapment = pmatch.id.endsWith("p_target");
+                is_entrapment = has_entrapment_label(pmatch.id);
             }else if(fdp_level.equals(FDRType.peptide)){
                 pmatch.peptide = psm_table.row(i).getString("peptide");
                 pmatch.id = psm_table.row(i).getString("peptide");
@@ -3136,8 +3152,8 @@ public class FDREval {
                     is_entrapment = target2label.get(pmatch.peptide).equals("p_target");
                 }else{
                     // determine the type of peptide based on its protein
-                    pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
-                    is_entrapment = pmatch.protein.endsWith("p_target");
+                    pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
+                    is_entrapment = has_entrapment_label(pmatch.protein);
                 }
 
             }else if(fdp_level.equals(FDRType.precursor)) {
@@ -3156,8 +3172,8 @@ public class FDREval {
                     }
                 }else{
                     // determine the type of peptide based on its protein
-                    pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";","p_target",pick_one_protein_method);
-                    is_entrapment = pmatch.protein.endsWith("p_target");
+                    pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
+                    is_entrapment = has_entrapment_label(pmatch.protein);
                 }
             }else{
                 System.err.println("FDP level is not supported: "+fdp_level);
@@ -3280,7 +3296,7 @@ public class FDREval {
             String line;
             while((line=br.readLine())!=null){
                 String []d=line.trim().split("\t");
-                proteins.add(PEntrapment.format_pg(d[col2index.get(protein_col_name)],";","p_target",pick_one_protein_method));
+                proteins.add(PEntrapment.format_pg(d[col2index.get(protein_col_name)],";",entrapment_label,pick_one_protein_method));
                 //proteins.add(d[col2index.get(protein_col_name)]);
             }
             br.close();

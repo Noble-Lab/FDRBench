@@ -140,6 +140,8 @@ public class FDRBenchGUI extends JFrame {
     private JSpinner fdpFoldSpinner;
     private JComboBox<String> pickMethodCombo;
     private JTextField rRatioField;
+    private JTextField fdpEntrapmentLabelField;
+    private JComboBox<String> fdpEntrapmentPosCombo;
 
     // Advanced settings (shared)
     private JSpinner seedSpinner;
@@ -1343,6 +1345,33 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(pickMethodCombo, gbc);
+        row++;
+
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(createLabel("Entrapment Label:",
+                "Suffix/prefix that marks entrapment entries in the input "
+                        + "file's protein column. Must match the label used "
+                        + "when generating the entrapment database."), gbc);
+        fdpEntrapmentLabelField = createTextField("_p_target");
+        fdpEntrapmentLabelField.setText("_p_target");
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(fdpEntrapmentLabelField, gbc);
+        row++;
+
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(createLabel("Entrapment Label Pos:",
+                "Position of the entrapment label on the protein ID."), gbc);
+        fdpEntrapmentPosCombo = new JComboBox<>(new String[] { "End", "Start" });
+        fdpEntrapmentPosCombo.setSelectedIndex(0);
+        styleComboBox(fdpEntrapmentPosCombo);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(fdpEntrapmentPosCombo, gbc);
 
         return panel;
     }
@@ -1891,9 +1920,19 @@ public class FDRBenchGUI extends JFrame {
         }
 
         addOption(cmd, "-seed", String.valueOf(seedSpinner.getValue()));
-        addOptionIfChanged(cmd, "-entrapment_label", entrapmentLabelField.getText(), "_p_target");
+        // The entrapment label/pos for the FDP workflow lives in the FDP
+        // settings panel so it can be set to match an externally-generated
+        // database; the DB-generation panel keeps its own copy.
+        boolean isFdpWorkflow = (currentWorkflow == WORKFLOW_FDP_ESTIMATION);
+        String entrapmentLabel = isFdpWorkflow
+                ? fdpEntrapmentLabelField.getText()
+                : entrapmentLabelField.getText();
+        int entrapmentPosIndex = isFdpWorkflow
+                ? fdpEntrapmentPosCombo.getSelectedIndex()
+                : entrapmentPosCombo.getSelectedIndex();
+        addOptionIfChanged(cmd, "-entrapment_label", entrapmentLabel, "_p_target");
         addOptionIfChanged(cmd, "-decoy_label", decoyLabelField.getText(), "rev_");
-        if (entrapmentPosCombo.getSelectedIndex() == 1) {
+        if (entrapmentPosIndex == 1) {
             addOption(cmd, "-entrapment_pos", "0");
         }
         if (decoyPosCombo.getSelectedIndex() == 1) {
@@ -2437,6 +2476,8 @@ public class FDRBenchGUI extends JFrame {
         fdpFoldSpinner.setValue(1);
         pickMethodCombo.setSelectedIndex(0);
         rRatioField.setText("");
+        fdpEntrapmentLabelField.setText("_p_target");
+        fdpEntrapmentPosCombo.setSelectedIndex(0);
 
         // Advanced
         seedSpinner.setValue(2000);
