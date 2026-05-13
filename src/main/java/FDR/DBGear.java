@@ -58,6 +58,22 @@ public class DBGear {
         return(enzymes.get(ind));
     }
 
+    /**
+     * Names of all defined enzymes, in the same order used by {@link #getEnzymeByIndex(int)}.
+     * Calls {@link #init_enzymes()} on demand so callers that only need the list
+     * (e.g. the GUI dropdown) don't have to remember to initialise first.
+     */
+    public static List<String> getEnzymeNames(){
+        if(enzymes.isEmpty()){
+            init_enzymes();
+        }
+        List<String> names = new ArrayList<>(enzymes.size());
+        for(Enzyme e : enzymes){
+            names.add(e.getName());
+        }
+        return names;
+    }
+
     public static int getEnzymeIndexByName(String enzyme_name){
 
         int ind = -1;
@@ -132,6 +148,11 @@ public class DBGear {
         enzyme.addAminoAcidAfter('X');
         enzymes.add(enzyme);
         EnzymeFactory.getInstance().addEnzyme(enzyme);
+
+        enzyme = new Enzyme("Tryp-N");
+        enzyme.addAminoAcidAfter('R');
+        enzyme.addAminoAcidAfter('K');
+        enzymes.add(enzyme);
     }
 
 

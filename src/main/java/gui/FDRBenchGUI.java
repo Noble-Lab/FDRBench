@@ -4,6 +4,7 @@ import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import main.java.FDR.CParameter;
+import main.java.FDR.DBGear;
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
@@ -894,6 +895,13 @@ public class FDRBenchGUI extends JFrame {
         return panel;
     }
 
+    private static final String DEFAULT_ENZYME_NAME = "Trypsin (no P rule)";
+
+    private static int defaultEnzymeIndex() {
+        int idx = DBGear.getEnzymeNames().indexOf(DEFAULT_ENZYME_NAME);
+        return idx >= 0 ? idx : 0;
+    }
+
     private JPanel createDbDigestionPanel() {
         JPanel panel = createSectionPanel("Digestion Settings");
         GridBagConstraints gbc = new GridBagConstraints();
@@ -906,12 +914,13 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridy = row;
         gbc.weightx = 0;
         panel.add(enzymeLabel, gbc);
-        enzymeCombo = new JComboBox<>(new String[] {
-                "0: Non-specific", "1: Trypsin", "2: Trypsin (no P rule)",
-                "3: Arg-C", "4: Arg-C (no P rule)", "5: Arg-N",
-                "6: Glu-C", "7: Lys-C", "8: NoCut"
-        });
-        enzymeCombo.setSelectedIndex(2);
+        List<String> enzymeNames = DBGear.getEnzymeNames();
+        String[] enzymeItems = new String[enzymeNames.size()];
+        for (int i = 0; i < enzymeNames.size(); i++) {
+            enzymeItems[i] = i + ": " + enzymeNames.get(i);
+        }
+        enzymeCombo = new JComboBox<>(enzymeItems);
+        enzymeCombo.setSelectedIndex(defaultEnzymeIndex());
         styleComboBox(enzymeCombo);
         gbc.gridx = 1;
         gbc.weightx = 1;
@@ -2581,7 +2590,7 @@ public class FDRBenchGUI extends JFrame {
         updateFileFieldState(foreignSpeciesField, foreignSpeciesFiles);
         dbOutputField.setText("");
         dbLevelCombo.setSelectedIndex(0);
-        enzymeCombo.setSelectedIndex(2);
+        enzymeCombo.setSelectedIndex(defaultEnzymeIndex());
         missCleavageSpinner.setValue(1);
         minLengthSpinner.setValue(7);
         maxLengthSpinner.setValue(35);
