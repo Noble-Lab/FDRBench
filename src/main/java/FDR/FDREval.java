@@ -2590,6 +2590,7 @@ public class FDREval {
         HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .columnTypesPartial(Collections.singletonMap("q_value", ColumnType.DOUBLE))
+                .maxCharsPerColumn(10000000)
                 .separator('\t')
                 .header(true);
         CsvReadOptions options = builder.build();
@@ -2787,6 +2788,7 @@ public class FDREval {
         HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .columnTypesPartial(Collections.singletonMap("q_value", ColumnType.DOUBLE))
+                .maxCharsPerColumn(10000000)
                 .separator('\t')
                 .header(true);
         CsvReadOptions options = builder.build();
