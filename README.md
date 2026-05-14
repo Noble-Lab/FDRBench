@@ -17,7 +17,7 @@ FDRBench provides a standalone graphical user interface (GUI) for Windows, Linux
 
 ### Using FDRBench through the command line
 
-FDRBench is written in Java and can run on Windows, macOS, and Linux. To run FDRBench from the command line, Java must be installed. If Java is not installed, please install it by following the instructions at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After Java is installed, FDRBench can be downloaded from https://github.com/Noble-Lab/FDRBench/releases.
+FDRBench is written in Java and can run on Windows, macOS, and Linux. To run FDRBench from the command line, Java 11 or newer must be installed. If Java is not installed, please install it by following the instructions at https://openjdk.org/install/ or https://www.oracle.com/java/technologies/downloads/. After Java is installed, FDRBench can be downloaded from https://github.com/Noble-Lab/FDRBench/releases.
 
 ## Usage
 
