@@ -173,6 +173,11 @@ public class FDRBenchGUI extends JFrame {
     private JToggleButton darkModeToggle;
     private JToggleButton particleToggle;
 
+    // GitHub-update notification bar, parked above the animated header in
+    // NORTH. Hidden by default; revealed by triggerStartupUpdateCheck()
+    // or the manual Help → Check for updates… menu item.
+    private UpdateBanner updateBanner;
+
     // Panel references needed across methods
     private JPanel parametersContentPanel;
     private JPanel workflowCardsPanel;
@@ -297,8 +302,18 @@ public class FDRBenchGUI extends JFrame {
     private void initComponents() {
         setLayout(new BorderLayout());
 
-        // Header
-        add(createHeader(), BorderLayout.NORTH);
+        // Menu bar — currently just the Help menu (Check for updates… and the
+        // auto-check opt-out). FlatLaf folds it into the painted title bar.
+        setJMenuBar(createMenuBar());
+
+        // Top stack in NORTH: update banner (hidden until startup check finds
+        // something) above the animated header.
+        updateBanner = new UpdateBanner();
+        JPanel north = new JPanel(new BorderLayout());
+        north.setOpaque(false);
+        north.add(updateBanner, BorderLayout.NORTH);
+        north.add(createHeader(), BorderLayout.CENTER);
+        add(north, BorderLayout.NORTH);
 
         // Tabbed pane
         tabbedPane = new JTabbedPane();
@@ -324,6 +339,10 @@ public class FDRBenchGUI extends JFrame {
 
         // Initial visibility
         updateWorkflowPanelVisibility();
+
+        // Background poll of GitHub for newer releases. Honors the auto-check
+        // preference and the 12h throttle; silently no-ops if either says skip.
+        triggerStartupUpdateCheck();
     }
 
     // ==================== HEADER ====================
@@ -3718,6 +3737,126 @@ public class FDRBenchGUI extends JFrame {
         b = (b <= 0.03928) ? (b / 12.92) : Math.pow((b + 0.055) / 1.055, 2.4);
         double L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
         return (L > 0.70) ? new Color(20, 20, 20) : Color.WHITE;
+    }
+
+    // ==================== UPDATE CHECK ====================
+
+    /**
+     * Build the menu bar. Currently only the Help menu — the rest of the GUI's
+     * actions live in the Workflow / Console tabs.
+     */
+    private JMenuBar createMenuBar() {
+        JMenuBar menuBar = new JMenuBar();
+        JMenu helpMenu = new JMenu("Help");
+        helpMenu.setMnemonic('H');
+
+        JMenuItem checkNow = new JMenuItem("Check for updates…");
+        checkNow.addActionListener(e -> checkForUpdates(true));
+        helpMenu.add(checkNow);
+
+        JCheckBoxMenuItem autoCheck = new JCheckBoxMenuItem(
+                "Automatically check for updates on startup",
+                UpdateChecker.isAutoCheckEnabled());
+        autoCheck.addActionListener(e ->
+                UpdateChecker.setAutoCheckEnabled(autoCheck.isSelected()));
+        helpMenu.add(autoCheck);
+
+        helpMenu.addSeparator();
+
+        JMenuItem about = new JMenuItem("About FDRBench");
+        about.addActionListener(e -> showAboutDialog());
+        helpMenu.add(about);
+
+        menuBar.add(helpMenu);
+        return menuBar;
+    }
+
+    /**
+     * Kick off a background check on startup. Skips silently when the user
+     * has opted out or the 12h auto-check throttle is still in effect — that
+     * way users in air-gapped labs never see a popup or banner from us.
+     */
+    private void triggerStartupUpdateCheck() {
+        if (!UpdateChecker.shouldAutoCheckOnStartup()) return;
+        runUpdateCheckAsync(false);
+    }
+
+    /**
+     * Manual ({@code Help → Check for updates…}) or auto check. The {@code
+     * manual} flag controls whether we surface "you're up to date" / network
+     * error dialogs; auto checks stay silent on failure.
+     */
+    private void checkForUpdates(boolean manual) {
+        runUpdateCheckAsync(manual);
+    }
+
+    private void runUpdateCheckAsync(final boolean manual) {
+        SwingWorker<UpdateChecker.ReleaseInfo, Void> worker =
+                new SwingWorker<UpdateChecker.ReleaseInfo, Void>() {
+            IOException failure;
+            @Override
+            protected UpdateChecker.ReleaseInfo doInBackground() {
+                UpdateChecker.recordCheckAttempt();
+                try {
+                    return UpdateChecker.fetchLatestRelease().orElse(null);
+                } catch (IOException ex) {
+                    failure = ex;
+                    return null;
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+            @Override
+            protected void done() {
+                UpdateChecker.ReleaseInfo info;
+                try { info = get(); } catch (Exception ignored) { info = null; }
+                String current = UpdateChecker.currentVersion();
+                boolean newer = info != null
+                        && UpdateChecker.isNewer(info.tagName, current);
+                if (newer) {
+                    boolean skipped = UpdateChecker.isVersionSkipped(info.tagName);
+                    // Manual checks always show the banner, even for tags the
+                    // user previously chose to skip — they explicitly asked.
+                    if (manual || !skipped) {
+                        updateBanner.show(info, current);
+                    }
+                    if (manual) {
+                        JOptionPane.showMessageDialog(FDRBenchGUI.this,
+                                "FDRBench " + info.tagName + " is available.\n"
+                                        + "You're running " + current + ".\n\n"
+                                        + "Use the banner at the top of the window\n"
+                                        + "to open the release page.",
+                                "Update available",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } else if (manual) {
+                    if (failure != null) {
+                        JOptionPane.showMessageDialog(FDRBenchGUI.this,
+                                "Could not contact GitHub:\n" + failure.getMessage(),
+                                "Update check failed",
+                                JOptionPane.WARNING_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(FDRBenchGUI.this,
+                                "You're running the latest version of FDRBench ("
+                                        + current + ").",
+                                "Up to date",
+                                JOptionPane.INFORMATION_MESSAGE);
+                    }
+                }
+            }
+        };
+        worker.execute();
+    }
+
+    private void showAboutDialog() {
+        String current = UpdateChecker.currentVersion();
+        JOptionPane.showMessageDialog(this,
+                "<html><b>FDRBench " + current + "</b><br/>"
+                        + "FDR control evaluation tool for proteomics<br/><br/>"
+                        + "https://github.com/Noble-Lab/FDRBench</html>",
+                "About FDRBench",
+                JOptionPane.INFORMATION_MESSAGE);
     }
 
     // ==================== MAIN ====================
