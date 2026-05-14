@@ -302,10 +302,6 @@ public class FDRBenchGUI extends JFrame {
     private void initComponents() {
         setLayout(new BorderLayout());
 
-        // Menu bar — currently just the Help menu (Check for updates… and the
-        // auto-check opt-out). FlatLaf folds it into the painted title bar.
-        setJMenuBar(createMenuBar());
-
         // Top stack in NORTH: update banner (hidden until startup check finds
         // something) above the animated header.
         updateBanner = new UpdateBanner();
@@ -2163,7 +2159,33 @@ public class FDRBenchGUI extends JFrame {
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
         scrollPane.setViewportBorder(BorderFactory.createEmptyBorder());
 
-        JOptionPane.showMessageDialog(this, scrollPane, "FDRBench Help",
+        // Update-check footer pinned to the bottom of the Help dialog: version
+        // label, manual "Check for updates" button, and the auto-check on
+        // startup toggle. This is the single place users go for version /
+        // update info — we deliberately don't add a separate menu bar item.
+        JPanel updateRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 12, 4));
+        updateRow.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(1, 0, 0, 0,
+                        UIManager.getColor("Component.borderColor")),
+                BorderFactory.createEmptyBorder(8, 8, 4, 8)));
+        JLabel versionLabel = new JLabel("FDRBench v" + UpdateChecker.currentVersion());
+        versionLabel.setFont(versionLabel.getFont().deriveFont(Font.BOLD));
+        JButton checkButton = new JButton("Check for updates");
+        checkButton.addActionListener(e -> checkForUpdates(true));
+        JCheckBox autoCheckBox = new JCheckBox(
+                "Automatically check on startup",
+                UpdateChecker.isAutoCheckEnabled());
+        autoCheckBox.addActionListener(e ->
+                UpdateChecker.setAutoCheckEnabled(autoCheckBox.isSelected()));
+        updateRow.add(versionLabel);
+        updateRow.add(checkButton);
+        updateRow.add(autoCheckBox);
+
+        JPanel content = new JPanel(new BorderLayout(0, 0));
+        content.add(scrollPane, BorderLayout.CENTER);
+        content.add(updateRow, BorderLayout.SOUTH);
+
+        JOptionPane.showMessageDialog(this, content, "FDRBench Help",
                 JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -3742,36 +3764,6 @@ public class FDRBenchGUI extends JFrame {
     // ==================== UPDATE CHECK ====================
 
     /**
-     * Build the menu bar. Currently only the Help menu — the rest of the GUI's
-     * actions live in the Workflow / Console tabs.
-     */
-    private JMenuBar createMenuBar() {
-        JMenuBar menuBar = new JMenuBar();
-        JMenu helpMenu = new JMenu("Help");
-        helpMenu.setMnemonic('H');
-
-        JMenuItem checkNow = new JMenuItem("Check for updates…");
-        checkNow.addActionListener(e -> checkForUpdates(true));
-        helpMenu.add(checkNow);
-
-        JCheckBoxMenuItem autoCheck = new JCheckBoxMenuItem(
-                "Automatically check for updates on startup",
-                UpdateChecker.isAutoCheckEnabled());
-        autoCheck.addActionListener(e ->
-                UpdateChecker.setAutoCheckEnabled(autoCheck.isSelected()));
-        helpMenu.add(autoCheck);
-
-        helpMenu.addSeparator();
-
-        JMenuItem about = new JMenuItem("About FDRBench");
-        about.addActionListener(e -> showAboutDialog());
-        helpMenu.add(about);
-
-        menuBar.add(helpMenu);
-        return menuBar;
-    }
-
-    /**
      * Kick off a background check on startup. Skips silently when the user
      * has opted out or the 12h auto-check throttle is still in effect — that
      * way users in air-gapped labs never see a popup or banner from us.
@@ -3782,9 +3774,9 @@ public class FDRBenchGUI extends JFrame {
     }
 
     /**
-     * Manual ({@code Help → Check for updates…}) or auto check. The {@code
-     * manual} flag controls whether we surface "you're up to date" / network
-     * error dialogs; auto checks stay silent on failure.
+     * Manual ({@code Help dialog → Check for updates}) check. Surfaces a
+     * "you're up to date" or network-error dialog on completion so the user
+     * gets feedback that the check actually ran.
      */
     private void checkForUpdates(boolean manual) {
         runUpdateCheckAsync(manual);
@@ -3792,7 +3784,7 @@ public class FDRBenchGUI extends JFrame {
 
     private void runUpdateCheckAsync(final boolean manual) {
         SwingWorker<UpdateChecker.ReleaseInfo, Void> worker =
-                new SwingWorker<UpdateChecker.ReleaseInfo, Void>() {
+                new SwingWorker<>() {
             IOException failure;
             @Override
             protected UpdateChecker.ReleaseInfo doInBackground() {
@@ -3847,16 +3839,6 @@ public class FDRBenchGUI extends JFrame {
             }
         };
         worker.execute();
-    }
-
-    private void showAboutDialog() {
-        String current = UpdateChecker.currentVersion();
-        JOptionPane.showMessageDialog(this,
-                "<html><b>FDRBench " + current + "</b><br/>"
-                        + "FDR control evaluation tool for proteomics<br/><br/>"
-                        + "https://github.com/Noble-Lab/FDRBench</html>",
-                "About FDRBench",
-                JOptionPane.INFORMATION_MESSAGE);
     }
 
     // ==================== MAIN ====================
