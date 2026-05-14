@@ -80,6 +80,14 @@ public class FdpPlotPanel extends JPanel {
     private JFreeChart chart;
     private File loadedCsv;
 
+    // Cap on q_value applied while parsing the FDP CSV. Rows with q above
+    // qFilterMax are skipped entirely so that very large files (q ranging
+    // from 0 to 1 with millions of rows) don't bog down JFreeChart rendering
+    // out in the high-q tail where every segment overlaps on the same pixel.
+    // Exposed as a spinner in the right-hand controls panel; persists across
+    // CSV loads because it's a user preference, not chart state.
+    private double qFilterMax = 0.2;
+
     // Plot-side controls (right-hand panel). Re-created on every CSV load, so
     // they're nullable — null whenever no chart is showing.
     private JRadioButton xAutoBtn;
@@ -375,7 +383,7 @@ public class FdpPlotPanel extends JPanel {
             return;
         }
         try {
-            FdpData data = parseCsv(csv);
+            FdpData data = parseCsv(csv, qFilterMax);
             chart = buildChart(data);
             // Mirror axis-range changes from any source (mouse zoom, panel
             // controls, double-click reset) into our tick / format / annotation
@@ -486,6 +494,33 @@ public class FdpPlotPanel extends JPanel {
         title.setFont(title.getFont().deriveFont(Font.BOLD));
         p.add(title, g);
         g.gridy++;
+
+        // ---- Max q_value filter -----------------------------------------
+        // Sits above the axis controls because it governs what data is
+        // loaded — the axis ranges only make sense once parsing is done.
+        String qFilterTip = "<html>Rows with qvalue above this cap are skipped<br/>"
+                + "while loading the CSV. Lower it for faster rendering<br/>"
+                + "on very large files; raise it to 1.0 to plot the full range.</html>";
+        JLabel qFilterLabel = new JLabel("Max qvalue");
+        qFilterLabel.setToolTipText(qFilterTip);
+        p.add(qFilterLabel, g);
+        g.gridy++;
+        JSpinner qFilterSpinner = new JSpinner(new SpinnerNumberModel(
+                qFilterMax, 0.001, 1.0, 0.01));
+        qFilterSpinner.setEditor(new JSpinner.NumberEditor(qFilterSpinner, "0.000"));
+        qFilterSpinner.setToolTipText(qFilterTip);
+        g.insets = new Insets(0, 8, 6, 0);
+        p.add(qFilterSpinner, g);
+        g.gridy++;
+        g.insets = new Insets(8, 0, 6, 0);
+        qFilterSpinner.addChangeListener(e -> {
+            double v = ((Number) qFilterSpinner.getValue()).doubleValue();
+            if (Math.abs(v - qFilterMax) < 1e-12) return;
+            qFilterMax = v;
+            if (loadedCsv != null) {
+                loadFromCsv(loadedCsv);
+            }
+        });
 
         // ---- X axis range ------------------------------------------------
         p.add(new JLabel("X axis range"), g);
@@ -889,7 +924,7 @@ public class FdpPlotPanel extends JPanel {
         boolean hasLower()    { return lowerIdx    >= 0; }
     }
 
-    private static FdpData parseCsv(File csv) throws IOException {
+    private static FdpData parseCsv(File csv, double maxQ) throws IOException {
         FdpData data = new FdpData();
         try (BufferedReader r = new BufferedReader(new FileReader(csv))) {
             String header = r.readLine();
@@ -921,8 +956,13 @@ public class FdpPlotPanel extends JPanel {
                 for (int i = 0; i < tok.length; i++) {
                     row[i] = parseDoubleSafe(tok[i]);
                 }
+                // Drop rows above the q-value cap before allocating space for
+                // them in data.rows — saves memory and lets the auto axis
+                // range hug the filtered region instead of the full 0..1 span.
+                double q = valueAt(row, data.qIdx);
+                if (Double.isNaN(q) || q > maxQ) continue;
                 data.rows.add(row);
-                data.maxFdp = Math.max(data.maxFdp, valueAt(row, data.qIdx));
+                data.maxFdp = Math.max(data.maxFdp, q);
                 if (data.hasCombined()) data.maxFdp = Math.max(data.maxFdp, valueAt(row, data.combinedIdx));
                 if (data.hasPaired())   data.maxFdp = Math.max(data.maxFdp, valueAt(row, data.pairedIdx));
                 if (data.hasLower())    data.maxFdp = Math.max(data.maxFdp, valueAt(row, data.lowerIdx));
