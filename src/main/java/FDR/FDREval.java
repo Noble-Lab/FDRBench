@@ -134,6 +134,15 @@ public class FDREval {
     public static Fix_NC fix_nc_aa = Fix_NC.NC;
 
     /**
+     * Also fix the protein N-/C-terminal residue when building protein-level entrapment proteins,
+     * on top of the per-peptide {@link #fix_nc_aa} constraint. Controlled by {@code -fix_protein_nc}:
+     * the N-terminus is fixed by default, the C-terminus is not. Pass {@code -fix_protein_nc off}
+     * to disable both. Protein level only.
+     */
+    public static boolean fix_protein_n_term = resolveFixProteinNc(null)[0];
+    public static boolean fix_protein_c_term = resolveFixProteinNc(null)[1];
+
+    /**
      * If r_ratio is <=0, it is not used.
      */
     public static double r_ratio = -1.0;
@@ -203,6 +212,32 @@ public class FDREval {
         }
     }
 
+    /**
+     * Resolves the {@code -fix_protein_nc} option value into the pair
+     * {@code {fix_protein_n_term, fix_protein_c_term}}. A {@code null} value (option absent)
+     * returns the default: fix the protein N-terminus only. This is the single source of truth
+     * for both the field defaults above and the {@code main()} option parsing below.
+     *
+     * @param value {@code n}, {@code c}, {@code nc}/{@code cn}, {@code off}, or {@code null} for the default.
+     * @return a two-element array {@code {nTermFixed, cTermFixed}}.
+     * @throws IllegalArgumentException if {@code value} is non-null and not a recognized keyword.
+     */
+    public static boolean[] resolveFixProteinNc(String value) {
+        if (value == null || value.equalsIgnoreCase("n")) {
+            return new boolean[]{true, false};
+        }
+        if (value.equalsIgnoreCase("c")) {
+            return new boolean[]{false, true};
+        }
+        if (value.equalsIgnoreCase("nc") || value.equalsIgnoreCase("cn")) {
+            return new boolean[]{true, true};
+        }
+        if (value.equalsIgnoreCase("off")) {
+            return new boolean[]{false, false};
+        }
+        throw new IllegalArgumentException("Invalid fix_protein_nc option: " + value);
+    }
+
     public static void main(String[] args) throws ParseException, IOException {
 
         Options options = new Options();
@@ -214,6 +249,7 @@ public class FDREval {
         options.addOption("decoy", false, "Add decoy or not");
         options.addOption("clip_n_m", false, "When digesting a protein starting with amino acid M, two copies of the leading peptides (with and without the N-terminal M) are considered or not. Default is false.");
         options.addOption("fix_nc", true, "Fix N/C terminal amino acid. n/N: only N terminal, c/C: only C terminal and nc/NC/cn/CN: both (default)");
+        options.addOption("fix_protein_nc", true, "Also fix the protein N/C terminal amino acid when building protein-level entrapment proteins (in addition to -fix_nc). n: protein N-term, c: protein C-term, nc/cn: both, off: neither. Default: n");
 
         options.addOption("o",true, "Output file");
         options.addOption("I2L",false,"Convert I to L");
@@ -338,6 +374,17 @@ public class FDREval {
                 fix_nc_aa = Fix_NC.C;
             }else{
                 System.err.println("Invalid fix_nc option: "+nc);
+                System.exit(1);
+            }
+        }
+
+        if(cmd.hasOption("fix_protein_nc")){
+            try {
+                boolean[] r = resolveFixProteinNc(cmd.getOptionValue("fix_protein_nc"));
+                fix_protein_n_term = r[0];
+                fix_protein_c_term = r[1];
+            } catch (IllegalArgumentException e) {
+                System.err.println(e.getMessage());
                 System.exit(1);
             }
         }
@@ -560,6 +607,8 @@ public class FDREval {
             System.out.println("Peptide length range: " + CParameter.minPeptideLength + " - " + CParameter.maxPeptideLength);
             System.out.println("Clip N-terminal M: " + CParameter.clip_nTerm_M);
             System.out.println("Fix N/C terminal amino acid: " + fix_nc_aa.description);
+            System.out.println("Fix protein N-terminal residue: " + fix_protein_n_term);
+            System.out.println("Fix protein C-terminal residue: " + fix_protein_c_term);
             System.out.println("Add decoy: " + add_decoy);
             System.out.println("Convert I to L: " + I2L);
             System.out.println("N fold:" + n_fold);
@@ -2194,10 +2243,21 @@ public class FDREval {
             // This is used to generate entrapment proteins
             ArrayList<ArrayList<String>> decoy_peptides = new ArrayList<>(digested_peptides.size());
             // for each peptide, generate decoy peptides
-            for(ExtendedPeptide extendedPeptide: digested_peptides){
+            int n_digested_peptides = digested_peptides.size();
+            for(int pep_idx=0; pep_idx<n_digested_peptides; pep_idx++){
+                ExtendedPeptide extendedPeptide = digested_peptides.get(pep_idx);
                 String pep = extendedPeptide.peptide.getSequence();
+                // The first/last peptide of the protein additionally keeps the protein N-/C-terminal
+                // residue fixed when -fix_protein_nc is set (on top of the per-peptide -fix_nc).
+                boolean eff_fix_n = fix_n || (fix_protein_n_term && pep_idx == 0);
+                boolean eff_fix_c = fix_c || (fix_protein_c_term && pep_idx == n_digested_peptides - 1);
+                // Cache entrapments per (sequence, effective terminal constraints) so the same sequence
+                // can keep the protein terminus fixed at a terminal position yet shuffle freely when
+                // internal. The suffix is constant (a no-op) unless -fix_protein_nc adds a constraint
+                // beyond -fix_nc, in which case only the affected terminal sequences get a second entry.
+                String cache_key = pep + "_" + (eff_fix_n ? 1 : 0) + (eff_fix_c ? 1 : 0);
                 ArrayList<String> rnd_peptides = new ArrayList<>();
-                if(!peptide2decoys.containsKey(extendedPeptide.peptide.getSequence())){
+                if(!peptide2decoys.containsKey(cache_key)){
                     // for each peptide, generate one decoy peptide or multiple decoy peptides
                     if(pep.length()<=1){
                         // don't need to generate decoy peptides.
@@ -2209,31 +2269,31 @@ public class FDREval {
                                 if(random_peptide_generation_method == 0) {
                                     // 0
                                     if (fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }else {
                                     // 1
                                     if (fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }
                             }else{
                                 if(random_peptide_generation_method == 0) {
                                     // 0
                                     if(fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, eff_fix_c, eff_fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFast(pep, n_r_pro, eff_fix_c, eff_fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }else {
                                     if(fix_random_seed) {
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                     }else{
-                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                        rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                     }
                                 }
                             }
@@ -2245,9 +2305,9 @@ public class FDREval {
                         if(rnd_peptides.isEmpty()){
                             if(checking_for_duplicates_then_random){
                                 if (fix_random_seed) {
-                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
+                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, new Random(global_random_seed), n_max_try_decoy_peptide_generation);
                                 }else{
-                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, fix_c, fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
+                                    rnd_peptides = generateShufflePeptidesFastSwap(pep, n_r_pro, eff_fix_c, eff_fix_n, empty_target_decoy_peptides, global_random, n_max_try_decoy_peptide_generation);
                                 }
                                 if(rnd_peptides.isEmpty()) {
                                     rnd_peptides.add(pep);
@@ -2279,10 +2339,10 @@ public class FDREval {
                         Collections.shuffle(rnd_peptides, global_random);
                     }
 
-                    peptide2decoys.put(pep,rnd_peptides);
+                    peptide2decoys.put(cache_key,rnd_peptides);
                 }else{
                     // Use existing decoy peptides;
-                    rnd_peptides = peptide2decoys.get(pep);
+                    rnd_peptides = peptide2decoys.get(cache_key);
                 }
                 // System.out.println(extendedPeptide.peptide.getSequence());
                 // System.out.println(rnd_peptides.get(0));

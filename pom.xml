@@ -6,7 +6,7 @@
 
     <groupId>Proteomics</groupId>
     <artifactId>fdrbench</artifactId>
-    <version>1.1.1</version>
+    <version>1.2.0</version>
 
 
 <dependencies>
@@ -114,6 +114,17 @@
         <groupId>de.rototor.pdfbox</groupId>
         <artifactId>graphics2d</artifactId>
         <version>0.43</version>
+    </dependency>
+
+    <!-- JUnit for the unit tests under src/test/java. This must be COMPILE scope (not
+         test) because the build sets <sourceDirectory>src</sourceDirectory>, so the
+         test sources are also compiled during the main compile phase, where test-scoped
+         dependencies are not on the classpath. Consequence: junit + hamcrest are copied
+         into the packaged lib/ folder. -->
+    <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.13.2</version>
     </dependency>
 
 </dependencies>

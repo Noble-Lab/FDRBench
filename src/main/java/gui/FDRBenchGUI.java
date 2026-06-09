@@ -63,6 +63,7 @@ public class FDRBenchGUI extends JFrame {
     private JSpinner foldSpinner;
     private JCheckBox clipNmCheckbox;
     private JComboBox<String> fixNcCombo;
+    private JComboBox<String> fixProteinNcCombo;
     private JCheckBox i2lCheckbox;
     private JCheckBox decoyCheckbox;
     private JCheckBox diannCheckbox;
@@ -122,6 +123,8 @@ public class FDRBenchGUI extends JFrame {
     // shuffler, NOT by the dedup-only digest path that runs at protein +
     // foreign species + No Shared Peptides.
     private List<JComponent> fixNcRowComponents;
+
+    private List<JComponent> fixProteinNcRowComponents;
     // Reference kept so we can hide the whole Digestion Settings section when
     // every row inside it would be hidden (protein + Foreign Species).
     private JPanel dbDigestionPanel;
@@ -991,7 +994,7 @@ public class FDRBenchGUI extends JFrame {
         panel.add(clipNmCheckbox, gbc);
         row++;
 
-        JLabel fixNcLabel = createLabel("Fix N/C Terminal:", "Fix N and/or C terminal amino acids");
+        JLabel fixNcLabel = createLabel("Fix Peptide N/C Terminal:", "Fix N and/or C terminal amino acids of each peptide");
         gbc.gridx = 0;
         gbc.gridy = row;
         gbc.weightx = 0;
@@ -1002,6 +1005,22 @@ public class FDRBenchGUI extends JFrame {
         gbc.gridx = 1;
         gbc.weightx = 1;
         panel.add(fixNcCombo, gbc);
+        row++;
+
+        JLabel fixProteinNcLabel = createLabel("Fix Protein N/C Terminal:",
+                "Also fix the protein N- and/or C-terminal residue when building protein-level "
+                        + "entrapment proteins, on top of Fix N/C Terminal. Protein-level random "
+                        + "shuffling only; default fixes the protein N-terminus.");
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        panel.add(fixProteinNcLabel, gbc);
+        fixProteinNcCombo = new JComboBox<>(new String[] { "N only", "C only", "Both N and C", "Off" });
+        fixProteinNcCombo.setSelectedIndex(0);
+        styleComboBox(fixProteinNcCombo);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        panel.add(fixProteinNcCombo, gbc);
 
         // Rows that only ever apply at peptide level — hide whenever the user
         // is generating proteins.
@@ -1020,6 +1039,10 @@ public class FDRBenchGUI extends JFrame {
         // pins residues during shuffling). Plain digest-for-dedup (-ns)
         // doesn't use it, so it must NOT show in that case.
         fixNcRowComponents = java.util.Arrays.asList(fixNcLabel, fixNcCombo);
+
+        // Fix Protein N/C Terminal applies only to protein-level random
+        // shuffling (FDREval.generate_protein_entrapment_database).
+        fixProteinNcRowComponents = java.util.Arrays.asList(fixProteinNcLabel, fixProteinNcCombo);
 
         return panel;
     }
@@ -1557,6 +1580,7 @@ public class FDRBenchGUI extends JFrame {
         updateFdpFoldVisibility();
         updatePepPairVisibility();
         updateCheckDupVisibility();
+        updateFixProteinNcVisibility();
         updateNoSharedVisibility();
         updateAddDecoysVisibility();
     }
@@ -1581,6 +1605,30 @@ public class FDRBenchGUI extends JFrame {
             c.setVisible(show);
         }
         Container parent = checkDupRowComponents.get(0).getParent();
+        if (parent != null) {
+            parent.revalidate();
+            parent.repaint();
+        }
+    }
+
+    /**
+     * Show the Fix Protein N/C Terminal row only when its option has an effect —
+     * protein level + random shuffling in the DB Generation workflow (only
+     * generate_protein_entrapment_database honors -fix_protein_nc).
+     */
+    private void updateFixProteinNcVisibility() {
+        if (fixProteinNcRowComponents == null || dbLevelCombo == null) {
+            return;
+        }
+        boolean isProtein   = "protein".equals(dbLevelCombo.getSelectedItem());
+        boolean isShuffling = seqMethodCombo == null
+                || seqMethodCombo.getSelectedIndex() == SEQ_METHOD_SHUFFLING;
+        boolean show = isProtein && isShuffling
+                && currentWorkflow == WORKFLOW_DB_GENERATION;
+        for (JComponent c : fixProteinNcRowComponents) {
+            c.setVisible(show);
+        }
+        Container parent = fixProteinNcRowComponents.get(0).getParent();
         if (parent != null) {
             parent.revalidate();
             parent.repaint();
@@ -1788,6 +1836,9 @@ public class FDRBenchGUI extends JFrame {
         // Check Duplicates only takes effect in protein-level random
         // shuffling (FDREval.generate_protein_entrapment_database).
         updateCheckDupVisibility();
+        // Fix Protein N/C Terminal also only applies to protein-level random
+        // shuffling.
+        updateFixProteinNcVisibility();
         // No Shared Peptides only takes effect in protein-level foreign
         // species (FDREval.generate_protein_entrapment_database_from_multiple_species_data).
         updateNoSharedVisibility();
@@ -1987,6 +2038,13 @@ public class FDRBenchGUI extends JFrame {
                     || seqMethodCombo.getSelectedIndex() == SEQ_METHOD_SHUFFLING;
             addFlag(cmd, "-check", !isPeptideLevel && isShufflingMethod
                     && checkDuplicatesCheckbox.isSelected());
+            // -fix_protein_nc only affects protein-level random shuffling
+            // (generate_protein_entrapment_database). Emit it (explicitly,
+            // including the default "n") only there, so a stale selection
+            // doesn't leak into a peptide/foreign run.
+            if (!isPeptideLevel && isShufflingMethod) {
+                addOption(cmd, "-fix_protein_nc", getFixProteinNcValue());
+            }
             // -ns is a no-op outside protein-level foreign species (only
             // generate_protein_entrapment_database_from_multiple_species_data
             // honors it). Skip it elsewhere so a stale checked state doesn't
@@ -2885,6 +2943,15 @@ public class FDRBenchGUI extends JFrame {
             return "n";
         }
         return "nc";
+    }
+
+    private String getFixProteinNcValue() {
+        switch (fixProteinNcCombo.getSelectedIndex()) {
+            case 1:  return "c";
+            case 2:  return "nc";
+            case 3:  return "off";
+            default: return "n";
+        }
     }
 
     /**
