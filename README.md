@@ -2,6 +2,8 @@
 
 ![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/total.svg) ![Release](https://img.shields.io/github/release/Noble-Lab/FDRBench.svg)![Downloads](https://img.shields.io/github/downloads/Noble-Lab/FDRBench/latest/total)
 
+<img src="src/main/resources/fdrbench-icon.png" alt="FDRBench" width="20%">
+
 **FDRBench** is a tool for false discovery rate (FDR) control evaluation in proteomics. It provides two main functions: (1) build entrapment databases using randomly shuffled target sequences or using sequences from foreign species, and (2) estimate the false discovery proportion (FDP) using the lower bound, combined, and paired methods. FDRBench has been tested on identification results from a wide range of search engines, including DIA-NN, MSFragger, Spectronaut, MaxQuant, Tide, Sage and others. More details about how FDRBench works are provided in the following manuscript:
 
 Wen, B., Freestone, J., Riffle, M. et al. [Assessment of false discovery rate control in tandem mass spectrometry analysis using entrapment](https://doi.org/10.1038/s41592-025-02719-x). *Nat Methods* 22, 1454–1463 (2025).
