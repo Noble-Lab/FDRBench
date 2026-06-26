@@ -573,6 +573,15 @@ public class FDREval {
                 }
             }
 
+            // PSM-level FDP requires per-PSM counting without pairing, which only the
+            // combined entrapment method provides. The paired (k-fold) method pairs unique
+            // peptides and would fail when peptides repeat across PSMs, so require -r here.
+            if(fdrEval.fdp_level.equals(FDRType.psm) && !cmd.hasOption("r")){
+                System.err.println("PSM-level FDP estimation is only supported by the combined entrapment method. " +
+                        "Please rerun with -r <#entrapment/#target ratio> (e.g. -r 1).");
+                System.exit(1);
+            }
+
             if(cmd.hasOption("r")){
                 System.out.println("Use combined entrapment method ...");
                 r_ratio = Double.parseDouble(cmd.getOptionValue("r"));
@@ -3211,11 +3220,20 @@ public class FDREval {
                 pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);
                 pmatch.id = pmatch.protein;
                 is_entrapment = has_entrapment_label(pmatch.id);
-            }else if(fdp_level.equals(FDRType.peptide)){
+            }else if(fdp_level.equals(FDRType.peptide) || fdp_level.equals(FDRType.psm)){
+                // PSM level shares the peptide-level labeling: the combined entrapment
+                // method counts every row, so PSM-level input (one row per PSM, peptides
+                // not collapsed) is handled by counting each PSM independently.
                 pmatch.peptide = psm_table.row(i).getString("peptide");
                 pmatch.id = psm_table.row(i).getString("peptide");
                 if(!target2label.isEmpty()){
-                    is_entrapment = target2label.get(pmatch.peptide).equals("p_target");
+                    if(target2label.containsKey(pmatch.peptide)){
+                        is_entrapment = target2label.get(pmatch.peptide).equals("p_target");
+                    }else{
+                        System.err.println("Error: peptide is not present in the peptide list file:"+pmatch.peptide+", "+pep_file);
+                        System.err.println("The number of peptides loaded from the input peptide list file:"+target2label.size());
+                        System.exit(1);
+                    }
                 }else{
                     // determine the type of peptide based on its protein
                     pmatch.protein = PEntrapment.format_pg(psm_table.row(i).getString("protein"),";",entrapment_label,pick_one_protein_method);

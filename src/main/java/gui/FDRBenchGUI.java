@@ -2077,12 +2077,16 @@ public class FDRBenchGUI extends JFrame {
             boolean isShuffling = seqMethodCombo == null
                     || seqMethodCombo.getSelectedIndex() == SEQ_METHOD_SHUFFLING;
             String fdpLevel = String.valueOf(fdpLevelCombo.getSelectedItem());
+            boolean isPsmLevel = "psm".equals(fdpLevel);
             boolean isPeptideTierLevel = "peptide".equals(fdpLevel)
                     || "precursor".equals(fdpLevel)
-                    || "psm".equals(fdpLevel);
+                    || isPsmLevel;
+            // PSM level always uses the combined entrapment method (-r): the paired
+            // (k-fold) path pairs unique peptides and cannot handle peptides that
+            // repeat across PSMs, so reroute to -r even when a pair file is supplied.
             boolean rerouteToR = isShuffling
-                    && isPeptideTierLevel
-                    && pepPairFileField.getText().trim().isEmpty();
+                    && (isPsmLevel
+                        || (isPeptideTierLevel && pepPairFileField.getText().trim().isEmpty()));
             if (isShuffling && !rerouteToR) {
                 addOption(cmd, "-fold", String.valueOf(fdpFoldSpinner.getValue()));
             }
