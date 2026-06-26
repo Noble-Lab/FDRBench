@@ -2647,11 +2647,12 @@ public class FDREval {
 
 
     public void calc_fdp_fast(String psm_file, String pep_file, String target_col_name, String out_file){
-        HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
+        char sep = detect_separator(psm_file);
+        HashMap<String,Integer> col2index = get_column_names(psm_file,String.valueOf(sep));
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .columnTypesPartial(Collections.singletonMap("q_value", ColumnType.DOUBLE))
                 .maxCharsPerColumn(10000000)
-                .separator('\t')
+                .separator(sep)
                 .header(true);
         CsvReadOptions options = builder.build();
         Table psm_table = Table.read().usingOptions(options);
@@ -2826,13 +2827,14 @@ public class FDREval {
                 String new_psm_file = psm_file + ".remove_invalid_peptides";
                 BufferedWriter npWriter = new BufferedWriter(new FileWriter(new_psm_file));
 
-                HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
+                char sep = detect_separator(psm_file);
+                HashMap<String,Integer> col2index = get_column_names(psm_file,String.valueOf(sep));
                 BufferedReader pReader = new BufferedReader(new FileReader(psm_file));
                 npWriter.write(pReader.readLine().trim()+"\n");
                 String line;
                 while ((line = pReader.readLine()) != null) {
-                    String [] items = line.split("\t");
-                    String peptide = items[col2index.get("peptide")];
+                    String [] items = line.split(String.valueOf(sep));
+                    String peptide = items[col(col2index,"peptide",psm_file)];
                     if(invalid_peptides.contains(peptide)){
                        System.err.println("Remove: "+line);
                     }else{
@@ -2845,11 +2847,12 @@ public class FDREval {
                 System.out.println("Use new file:"+new_psm_file);
             }
         }
-        HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
+        char sep = detect_separator(psm_file);
+        HashMap<String,Integer> col2index = get_column_names(psm_file,String.valueOf(sep));
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .columnTypesPartial(Collections.singletonMap("q_value", ColumnType.DOUBLE))
                 .maxCharsPerColumn(10000000)
-                .separator('\t')
+                .separator(sep)
                 .header(true);
         CsvReadOptions options = builder.build();
         Table psm_table = Table.read().usingOptions(options);
@@ -3138,11 +3141,12 @@ public class FDREval {
 
 
     public void calc_fdp_fast_combined_entrapment_method(String psm_file, String pep_file, String out_file, double r){
-        HashMap<String,Integer> col2index = get_column_names(psm_file,"\t");
+        char sep = detect_separator(psm_file);
+        HashMap<String,Integer> col2index = get_column_names(psm_file,String.valueOf(sep));
         CsvReadOptions.Builder builder = CsvReadOptions.builder(psm_file)
                 .columnTypesPartial(Collections.singletonMap("q_value", ColumnType.DOUBLE))
                 .maxCharsPerColumn(10000000)
-                .separator('\t')
+                .separator(sep)
                 .header(true);
         CsvReadOptions options = builder.build();
         Table psm_table = Table.read().usingOptions(options);
@@ -3330,16 +3334,55 @@ public class FDREval {
     }
 
 
+    /**
+     * Detect the column delimiter of an identification file from its header line.
+     * Column names never contain a tab or comma, so whichever of the two appears in
+     * the header is the delimiter. Defaults to tab when neither (or a tie) is found.
+     */
+    public static char detect_separator(String input_file){
+        try {
+            BufferedReader br = new BufferedReader(new FileReader(input_file));
+            String head = br.readLine();
+            br.close();
+            if(head == null){
+                throw new IllegalArgumentException("Input file is empty: "+input_file);
+            }
+            long tabs = head.chars().filter(c -> c == '\t').count();
+            long commas = head.chars().filter(c -> c == ',').count();
+            return commas > tabs ? ',' : '\t';
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Look up a required column index, failing with a readable message instead of a
+     * NullPointerException when the column is absent (e.g. wrong delimiter).
+     */
+    private static int col(HashMap<String,Integer> col2index, String name, String file){
+        Integer i = col2index.get(name);
+        if(i == null){
+            throw new IllegalArgumentException(
+                    "Required column '"+name+"' not found in "+file+
+                    ". Found columns: "+col2index.keySet()+
+                    ". Is the file delimiter correct (tab or comma)?");
+        }
+        return i;
+    }
+
+
     public HashSet<String> get_all_peptides(String input_file, String peptide_col_name){
-        HashMap<String,Integer> col2index = get_column_names(input_file,"\t");
+        char sep = detect_separator(input_file);
+        String sep_str = String.valueOf(sep);
+        HashMap<String,Integer> col2index = get_column_names(input_file,sep_str);
         HashSet<String> peptides = new HashSet<>();
         try {
             BufferedReader br = new BufferedReader(new FileReader(input_file));
             String head = br.readLine().trim();
             String line;
             while((line=br.readLine())!=null){
-                String []d=line.trim().split("\t");
-                peptides.add(d[col2index.get(peptide_col_name)]);
+                String []d=line.trim().split(sep_str);
+                peptides.add(d[col(col2index,peptide_col_name,input_file)]);
             }
             br.close();
         } catch (IOException e) {
@@ -3350,15 +3393,17 @@ public class FDREval {
     }
 
     public HashSet<String> get_all_proteins(String input_file, String protein_col_name){
-        HashMap<String,Integer> col2index = get_column_names(input_file,"\t");
+        char sep = detect_separator(input_file);
+        String sep_str = String.valueOf(sep);
+        HashMap<String,Integer> col2index = get_column_names(input_file,sep_str);
         HashSet<String> proteins = new HashSet<>();
         try {
             BufferedReader br = new BufferedReader(new FileReader(input_file));
             String head = br.readLine().trim();
             String line;
             while((line=br.readLine())!=null){
-                String []d=line.trim().split("\t");
-                proteins.add(PEntrapment.format_pg(d[col2index.get(protein_col_name)],";",entrapment_label,pick_one_protein_method));
+                String []d=line.trim().split(sep_str);
+                proteins.add(PEntrapment.format_pg(d[col(col2index,protein_col_name,input_file)],";",entrapment_label,pick_one_protein_method));
                 //proteins.add(d[col2index.get(protein_col_name)]);
             }
             br.close();
