@@ -73,7 +73,7 @@ Use this workflow to estimate the FDP of a peptide or protein detection result u
 
 The main inputs:
 
-1. **Input File**: PSM / peptide / precursor / protein level identification file (TSV format). Decoy hits should be removed from the input file before FDP calculation. The format is described in the [FDP estimation](#FDP-calculation) section below.
+1. **Input File**: PSM / peptide / precursor / protein level identification file. The column delimiter (tab or comma) is detected automatically from the header line, so both tab-separated (`.tsv`/`.txt`) and comma-separated (`.csv`) files are accepted. Decoy hits should be removed from the input file before FDP calculation. The format is described in the [FDP estimation](#FDP-calculation) section below.
 2. **Peptide Pair File** (optional): the peptide pair `*.txt` file generated in Workflow 1. Required for the paired method at the peptide or precursor level.
 3. **Output Folder**: directory where the FDP estimation result and FDP-vs-FDR plot are written. The output file format is described in the [FDP estimation](#FDP-calculation) section below..
 
@@ -261,7 +261,7 @@ run                                                peptide                      
 20230406_OLEP08_MMCC_1ug_MB_24min_AS_10ms_4Th_I_1  AFLADPSAFVAAAPVAAATTAAPAAAAAPAK     AFLADPSAFVAAAPVAAATTAAPAAAAAPAK                 3       1e-9     0    AFLADPSAFVAAAPVAAATTAAPAAAAAPAK_target     9
 ```
 
-The required columns are described below. Decoy hits shouldn't be included in the input file for FDP calcualtion.
+The required columns are described below. The columns can be separated by either tabs or commas; FDRBench detects the delimiter automatically from the header line. Decoy hits shouldn't be included in the input file for FDP calcualtion.
 | Column name  | Description |
 | ------------ | ----------- |
 | peptide | peptide sequence |
