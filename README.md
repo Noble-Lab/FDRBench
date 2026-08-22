@@ -270,6 +270,7 @@ The required columns are described below. The columns can be separated by either
 | mod_peptide | peptide modification (optional for peptide level FDR control evaluation) |
 | charge | precursor charge (optional for peptide level FDR control evaluation) |
 | q_value | FDR reported by the search engine used to generate the result |
+| protein | protein ID (multiple IDs are separated by ";"). Required unless **-pep** is provided: without a peptide list file, the entrapment label in the protein ID is used to identify entrapment hits |
 | score | precursor or peptide score used to rank precursor or peptide for FDR calculation |
 
 
